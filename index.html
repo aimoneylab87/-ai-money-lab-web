@@ -1,3 +1,40 @@
+<script>
+function trackEvent(eventName, data = {}) {
+  const params = new URLSearchParams(window.location.search);
+
+  const source = params.get("utm_source");
+  const medium = params.get("utm_medium");
+  const campaign = params.get("utm_campaign");
+  const content = params.get("utm_content");
+
+  let sessionId = sessionStorage.getItem("ai_money_lab_session");
+
+  if (!sessionId) {
+    sessionId = crypto.randomUUID();
+    sessionStorage.setItem("ai_money_lab_session", sessionId);
+  }
+
+  fetch("https://func-ai-money-lab.azurewebsites.net/api/track", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      event: eventName,
+      source: source,
+      medium: medium,
+      campaign: campaign,
+      content: content,
+      landing_page: window.location.pathname,
+      referrer: document.referrer,
+      page_url: window.location.href,
+      session_id: sessionId,
+      ...data
+    })
+  }).catch(error => {
+    console.error("Tracking error:", error);
+  });
+}
 <!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-9JR1F5NEW6"></script>
 <script>
@@ -457,23 +494,24 @@
       </a>
 
       <ul class="nav-links">
-        <li><a href="#tools">AI Tools</a></li>
-        <li><a href="#hustles">Side Hustles</a></li>
-        <li><a href="#business">Online Business</a></li>
-        <li>
-          <a
-            href="https://www.youtube.com/"
-            target="_blank"
-            rel="noopener"
-            class="nav-button"
-          >
-            Watch on YouTube
-          </a>
-        </li>
-      </ul>
-
-    </div>
-  </nav>
+        <li><a href="#tools"
+   onclick="trackEvent('click', {destination: 'tools'})">
+  AI Tools
+</a>
+        <li><a href="#hustles"
+   onclick="trackEvent('click', {destination: 'hustles'})">
+  Side Hustles
+</a>
+        <li><a href="#business"
+   onclick="trackEvent('click', {destination: 'business'})">
+  Explore Online Business
+</a>
+        <li><a href="https://www.youtube.com/"
+   target="_blank"
+   rel="noopener"
+   onclick="trackEvent('click', {destination: 'youtube'})">
+  Watch the Channel
+</a>
 
   <main>
 
