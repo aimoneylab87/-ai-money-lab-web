@@ -217,7 +217,7 @@ async function loadAnalytics() {
       Do NOT put your Azure Function key in this file.
     */
 
-    const response = await fetch("/api/analytics-dashboard");
+    const response = await fetch("https://func-ai-money-lab.azurewebsites.net/api/analytics-dashboard");
 
     if (!response.ok) {
       throw new Error(
