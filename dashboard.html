@@ -1,10 +1,10 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <title>AI Money Lab — Analytics</title>
+  <title>AI Money Lab Analytics</title>
 
   <style>
     * {
@@ -14,119 +14,90 @@
     body {
       margin: 0;
       font-family: Arial, sans-serif;
-      background: #0f172a;
-      color: #f8fafc;
+      background: #f5f7fb;
+      color: #111827;
     }
 
     .container {
-      width: min(1200px, 92%);
+      max-width: 1100px;
       margin: 0 auto;
-      padding: 40px 0;
-    }
-
-    header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 35px;
-      gap: 20px;
+      padding: 30px 20px;
     }
 
     h1 {
-      margin: 0;
-      font-size: 32px;
+      margin-bottom: 8px;
     }
 
     .subtitle {
-      color: #94a3b8;
-      margin-top: 8px;
-    }
-
-    .back {
-      color: #38bdf8;
-      text-decoration: none;
+      color: #6b7280;
+      margin-bottom: 25px;
     }
 
     .cards {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
-      gap: 18px;
+      gap: 16px;
       margin-bottom: 30px;
     }
 
     .card {
-      background: #1e293b;
-      border: 1px solid #334155;
-      border-radius: 14px;
-      padding: 22px;
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.08);
     }
 
-    .card-label {
-      color: #94a3b8;
+    .card-title {
+      color: #6b7280;
       font-size: 14px;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
     }
 
     .card-value {
-      font-size: 32px;
+      font-size: 30px;
       font-weight: bold;
     }
 
-    section {
-      background: #1e293b;
-      border: 1px solid #334155;
-      border-radius: 14px;
-      padding: 24px;
+    .section {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
       margin-bottom: 25px;
-      overflow-x: auto;
-    }
-
-    h2 {
-      margin-top: 0;
-      font-size: 21px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.08);
     }
 
     table {
       width: 100%;
       border-collapse: collapse;
-      min-width: 700px;
     }
 
     th,
     td {
       text-align: left;
-      padding: 13px 10px;
-      border-bottom: 1px solid #334155;
+      padding: 12px;
+      border-bottom: 1px solid #e5e7eb;
     }
 
     th {
-      color: #94a3b8;
-      font-size: 13px;
-      text-transform: uppercase;
+      background: #f9fafb;
     }
 
     .status {
-      color: #38bdf8;
+      padding: 12px;
       margin-bottom: 20px;
+      border-radius: 8px;
+      background: #eef2ff;
+      color: #3730a3;
     }
 
     .error {
-      color: #f87171;
-    }
-
-    .empty {
-      color: #94a3b8;
-      padding: 20px 0;
+      background: #fee2e2;
+      color: #991b1b;
     }
 
     @media (max-width: 800px) {
       .cards {
         grid-template-columns: repeat(2, 1fr);
-      }
-
-      header {
-        flex-direction: column;
-        align-items: flex-start;
       }
     }
 
@@ -134,172 +105,245 @@
       .cards {
         grid-template-columns: 1fr;
       }
+
+      table {
+        font-size: 13px;
+      }
     }
   </style>
+
 </head>
 
 <body>
 
-<div class="container">
+  <div class="container">
 
-  <header>
-    <div>
-      <h1>AI Money Lab Analytics</h1>
-      <div class="subtitle">
-        Traffic, engagement and campaign performance
-      </div>
-    </div>
+```
+<h1>AI Money Lab Analytics</h1>
 
-    <a class="back" href="/">← Back to AI Money Lab</a>
-  </header>
+<div class="subtitle">
+  Traffic and conversion performance
+</div>
 
-  <div id="status" class="status">
-    Loading analytics...
+<div id="status" class="status">
+  Loading analytics...
+</div>
+
+<div class="cards">
+
+  <div class="card">
+    <div class="card-title">Page Views</div>
+    <div id="pageViews" class="card-value">0</div>
   </div>
 
-  <div class="cards">
-
-    <div class="card">
-      <div class="card-label">Visitors</div>
-      <div id="visitors" class="card-value">—</div>
-    </div>
-
-    <div class="card">
-      <div class="card-label">Page Views</div>
-      <div id="pageViews" class="card-value">—</div>
-    </div>
-
-    <div class="card">
-      <div class="card-label">Clicks</div>
-      <div id="clicks" class="card-value">—</div>
-    </div>
-
-    <div class="card">
-      <div class="card-label">Conversion Rate</div>
-      <div id="conversionRate" class="card-value">—</div>
-    </div>
-
+  <div class="card">
+    <div class="card-title">Clicks</div>
+    <div id="clicks" class="card-value">0</div>
   </div>
 
-  <section>
-    <h2>Campaign Performance</h2>
+  <div class="card">
+    <div class="card-title">Conversions</div>
+    <div id="conversions" class="card-value">0</div>
+  </div>
 
-    <table>
-      <thead>
-        <tr>
-          <th>Campaign</th>
-          <th>Platform</th>
-          <th>Content</th>
-          <th>Views</th>
-          <th>Clicks</th>
-          <th>Conversions</th>
-          <th>Rate</th>
-        </tr>
-      </thead>
-
-      <tbody id="campaignTable">
-      </tbody>
-    </table>
-  </section>
+  <div class="card">
+    <div class="card-title">Conversion Rate</div>
+    <div id="conversionRate" class="card-value">0%</div>
+  </div>
 
 </div>
 
-<script>
+<div class="section">
 
-async function loadAnalytics() {
+  <h2>Platforms</h2>
 
-  const status = document.getElementById("status");
+  <table>
 
-  try {
+    <thead>
+      <tr>
+        <th>Platform</th>
+        <th>Page Views</th>
+        <th>Clicks</th>
+        <th>Conversions</th>
+        <th>Conversion Rate</th>
+      </tr>
+    </thead>
 
-    /*
-      IMPORTANT:
-      Do NOT put your Azure Function key in this file.
-    */
+    <tbody id="platformTable">
+    </tbody>
 
-    const response = await fetch("https://func-ai-money-lab.azurewebsites.net/api/analytics-dashboard");
+  </table>
 
-    if (!response.ok) {
-      throw new Error(
-        "Analytics API returned HTTP " + response.status
-      );
+</div>
+
+<div class="section">
+
+  <h2>Campaigns</h2>
+
+  <table>
+
+    <thead>
+      <tr>
+        <th>Campaign</th>
+        <th>Page Views</th>
+        <th>Clicks</th>
+        <th>Conversions</th>
+        <th>Conversion Rate</th>
+      </tr>
+    </thead>
+
+    <tbody id="campaignTable">
+    </tbody>
+
+  </table>
+
+</div>
+
+<div class="section">
+
+  <h2>Content</h2>
+
+  <table>
+
+    <thead>
+      <tr>
+        <th>Content</th>
+        <th>Page Views</th>
+        <th>Clicks</th>
+        <th>Conversions</th>
+        <th>Conversion Rate</th>
+      </tr>
+    </thead>
+
+    <tbody id="contentTable">
+    </tbody>
+
+  </table>
+
+</div>
+```
+
+  </div>
+
+  <script>
+
+    async function loadAnalytics() {
+
+      const status = document.getElementById("status");
+
+      try {
+
+        const response =
+          await fetch("/api/analytics-dashboard");
+
+        if (!response.ok) {
+          throw new Error(
+            "Analytics API returned HTTP " +
+            response.status
+          );
+        }
+
+        const result =
+          await response.json();
+
+        if (!result.success) {
+          throw new Error(
+            result.error ||
+            "Analytics request failed"
+          );
+        }
+
+        const totals =
+          result.totals || {};
+
+        document.getElementById("pageViews").textContent =
+          Number(totals.page_views || 0);
+
+        document.getElementById("clicks").textContent =
+          Number(totals.clicks || 0);
+
+        document.getElementById("conversions").textContent =
+          Number(totals.conversions || 0);
+
+        document.getElementById("conversionRate").textContent =
+          Number(totals.conversion_rate || 0) + "%";
+
+        renderTable(
+          "platformTable",
+          result.platforms || [],
+          "platform"
+        );
+
+        renderTable(
+          "campaignTable",
+          result.campaigns || [],
+          "campaign"
+        );
+
+        renderTable(
+          "contentTable",
+          result.content || [],
+          "content"
+        );
+
+        status.textContent =
+          "Analytics loaded successfully.";
+
+        status.classList.remove("error");
+
+      } catch (error) {
+
+        console.error(error);
+
+        status.textContent =
+          "Unable to load analytics: " +
+          error.message;
+
+        status.classList.add("error");
+
+      }
+
     }
 
-    const result = await response.json();
 
-    if (!result.success) {
-      throw new Error(
-        result.error || "Analytics request failed"
-      );
-    }
+    function renderTable(
+      tableId,
+      rows,
+      nameField
+    ) {
 
-    const data = result.data || [];
+      const table =
+        document.getElementById(tableId);
 
-    let visitors = 0;
-    let pageViews = 0;
-    let clicks = 0;
-    let conversions = 0;
+      table.innerHTML = "";
 
-    data.forEach(row => {
+      rows.forEach(row => {
 
-      pageViews += Number(row.page_views || 0);
-      clicks += Number(row.clicks || 0);
-      conversions += Number(row.conversions || 0);
+        const pageViews =
+          Number(row.page_views || 0);
 
-    });
+        const clicks =
+          Number(row.clicks || 0);
 
-    /*
-      The current analytics endpoint is campaign grouped,
-      so visitors cannot be calculated directly from it.
-      We will add a dedicated visitor metric in the next
-      backend step.
-    */
+        const conversions =
+          Number(row.conversions || 0);
 
-    document.getElementById("visitors").textContent = "—";
+        let conversionRate = 0;
 
-    document.getElementById("pageViews").textContent =
-      pageViews.toLocaleString();
+        if (pageViews > 0) {
+          conversionRate =
+            (conversions / pageViews) * 100;
+        }
 
-    document.getElementById("clicks").textContent =
-      clicks.toLocaleString();
-
-    const conversionRate =
-      clicks > 0
-        ? ((conversions / clicks) * 100).toFixed(2)
-        : "0.00";
-
-    document.getElementById("conversionRate").textContent =
-      conversionRate + "%";
-
-    const table =
-      document.getElementById("campaignTable");
-
-    table.innerHTML = "";
-
-    if (data.length === 0) {
-
-      table.innerHTML = `
-        <tr>
-          <td colspan="7" class="empty">
-            No analytics data available.
-          </td>
-        </tr>
-      `;
-
-    } else {
-
-      data.forEach(row => {
-
-        const tr = document.createElement("tr");
+        const tr =
+          document.createElement("tr");
 
         tr.innerHTML = `
-          <td>${escapeHtml(row.campaign)}</td>
-          <td>${escapeHtml(row.platform)}</td>
-          <td>${escapeHtml(row.content)}</td>
-          <td>${Number(row.page_views || 0).toLocaleString()}</td>
-          <td>${Number(row.clicks || 0).toLocaleString()}</td>
-          <td>${Number(row.conversions || 0).toLocaleString()}</td>
-          <td>${Number(row.conversion_rate || 0).toFixed(2)}%</td>
+          <td>${escapeHtml(row[nameField] || "unknown")}</td>
+          <td>${pageViews}</td>
+          <td>${clicks}</td>
+          <td>${conversions}</td>
+          <td>${conversionRate.toFixed(2)}%</td>
         `;
 
         table.appendChild(tr);
@@ -308,38 +352,22 @@ async function loadAnalytics() {
 
     }
 
-    status.textContent =
-      "Analytics loaded successfully.";
 
-  } catch (error) {
+    function escapeHtml(value) {
 
-    console.error(error);
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
 
-    status.textContent =
-      "Unable to load analytics: " + error.message;
-
-    status.className = "status error";
-
-  }
-
-}
+    }
 
 
-function escapeHtml(value) {
+    loadAnalytics();
 
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-
-}
-
-
-loadAnalytics();
-
-</script>
+  </script>
 
 </body>
 </html>
