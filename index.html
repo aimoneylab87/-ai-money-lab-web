@@ -1,172 +1,79 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+cd ~/ai-money-lab-web
 
-  <title>AI Money Lab | AI Tools, Side Hustles & Online Business</title>
+# 1. Create backup
+cp index.html index.html.before-conversion
 
-  <meta
-    name="description"
-    content="AI Money Lab helps you discover AI tools, side hustles, automation strategies and practical online business ideas."
-  >
+# 2. Add the real conversion CTA before the closing body tag
+python3 - <<'PY'
+from pathlib import Path
 
-  <meta
-    name="keywords"
-    content="AI tools, AI side hustles, online business, AI automation, make money online, productivity"
-  >
+path = Path("index.html")
+html = path.read_text()
 
-  <meta name="author" content="AI Money Lab">
+cta = '''
+  <!-- PRIMARY CONVERSION CTA -->
+  <section id="conversion" style="padding:60px 20px;text-align:center;">
+    <div class="container">
+      <h2>Ready to Start?</h2>
 
-  <!-- Google Analytics -->
-  <script
-    async
-    src="https://www.googletagmanager.com/gtag/js?id=G-9JR1F5NEW6">
-  </script>
+      <p>
+        Explore the AI Money Lab resources and start building your online income strategy.
+      </p>
 
-  <script>
-    window.dataLayer = window.dataLayer || [];
-
-    function gtag() {
-      dataLayer.push(arguments);
-    }
-
-    gtag('js', new Date());
-    gtag('config', 'G-9JR1F5NEW6');
-  </script>
-
-  <!-- AI Money Lab Tracking -->
-  <script>
-    function trackEvent(eventName, data = {}) {
-      const params = new URLSearchParams(window.location.search);
-
-      const source = params.get("utm_source");
-      const medium = params.get("utm_medium");
-      const campaign = params.get("utm_campaign");
-      const content = params.get("utm_content");
-
-      let sessionId =
-        sessionStorage.getItem("ai_money_lab_session");
-
-      if (!sessionId) {
-        sessionId = crypto.randomUUID();
-
-        sessionStorage.setItem(
-          "ai_money_lab_session",
-          sessionId
-        );
-      }
-
-      const trackingData = {
-        event: eventName,
-        source: source,
-        medium: medium,
-        campaign: campaign,
-        content: content,
-        landing_page: window.location.pathname,
-        referrer: document.referrer,
-        page_url: window.location.href,
-        session_id: sessionId,
-        ...data
-      };
-
-      fetch(
-        "https://func-ai-money-lab.azurewebsites.net/api/track",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(trackingData)
-        }
-      )
-      .then(response => {
-        if (!response.ok) {
-          throw new Error(
-            `Tracking failed: ${response.status}`
-          );
-        }
-
-        return response.json();
-      })
-      .then(result => {
-        console.log(
-          "AI Money Lab tracking:",
-          result
-        );
-      })
-      .catch(error => {
-        console.error(
-          "AI Money Lab tracking error:",
-          error
-        );
-      });
-    }
-
-      if (!window.__aiMoneyLabPageViewTracked) {
-        window.__aiMoneyLabPageViewTracked = true;
-        trackEvent("page_view");
-      }
-  </script>
-
-  <!-- KEEP YOUR EXISTING <style> CODE HERE -->
-
-</head>
-
-<body>
-
-  <nav>
-    <div class="container nav-inner">
-
-      <a href="#" class="logo">
-        AI <span>Money Lab</span>
+      <a
+        href="https://aimoneyslab.com/"
+        onclick="trackEvent('conversion', {
+          destination: 'ai_money_lab_primary_cta',
+          conversion_type: 'primary_cta'
+        })"
+        style="
+          display:inline-block;
+          padding:14px 28px;
+          text-decoration:none;
+          border-radius:8px;
+          font-weight:bold;
+        "
+      >
+        Start AI Money Lab
       </a>
-
-      <ul class="nav-links">
-
-        <li>
-          <a
-            href="#tools"
-            onclick="trackEvent('click', {destination: 'tools'})"
-          >
-            AI Tools
-          </a>
-        </li>
-
-        <li>
-          <a
-            href="#hustles"
-            onclick="trackEvent('click', {destination: 'hustles'})"
-          >
-            Side Hustles
-          </a>
-        </li>
-
-        <li>
-          <a
-            href="#business"
-            onclick="trackEvent('click', {destination: 'business'})"
-          >
-            Explore Online Business
-          </a>
-        </li>
-
-        <li>
-          <a
-            href="https://www.youtube.com/"
-            target="_blank"
-            rel="noopener noreferrer"
-            onclick="trackEvent('click', {destination: 'youtube'})"
-          >
-            Watch the Channel
-          </a>
-        </li>
-
-      </ul>
     </div>
-  </nav>
+  </section>
+'''
 
-  <!-- KEEP THE REST OF YOUR EXISTING PAGE BELOW HERE -->
+if "id=\"conversion\"" not in html:
+    html = html.replace("</body>", cta + "\n</body>")
+    path.write_text(html)
+    print("Conversion CTA added.")
+else:
+    print("Conversion CTA already exists.")
+PY
 
-</body>
-</html>
+# 3. Verify conversion code
+echo
+echo "=== CONVERSION CHECK ==="
+grep -n -A18 -B3 "PRIMARY CONVERSION CTA" index.html
+
+echo
+echo "=== TRACKING CHECK ==="
+grep -n "trackEvent('conversion'" index.html
+
+# 4. Check Git
+echo
+echo "=== GIT STATUS ==="
+git status
+
+# 5. Commit the change
+git add index.html
+git commit -m "Add primary conversion tracking"
+
+# 6. Push to GitHub
+git push origin main
+
+# 7. Confirm
+echo
+echo "=== FINAL GIT STATUS ==="
+git status
+
+echo
+echo "=== LATEST COMMIT ==="
+git log -1 --oneline
