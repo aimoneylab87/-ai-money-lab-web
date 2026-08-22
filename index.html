@@ -103,7 +103,10 @@
       });
     }
 
-    trackEvent("page_view");
+      if (!window.__aiMoneyLabPageViewTracked) {
+        window.__aiMoneyLabPageViewTracked = true;
+        trackEvent("page_view");
+      }
   </script>
 
   <!-- KEEP YOUR EXISTING <style> CODE HERE -->
