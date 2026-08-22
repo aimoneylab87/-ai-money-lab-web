@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>AI Money Lab — Analytics</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+    }
+
+    .container {
+      width: min(1200px, 92%);
+      margin: 0 auto;
+      padding: 40px 0;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 35px;
+      gap: 20px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 32px;
+    }
+
+    .subtitle {
+      color: #94a3b8;
+      margin-top: 8px;
+    }
+
+    .back {
+      color: #38bdf8;
+      text-decoration: none;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 18px;
+      margin-bottom: 30px;
+    }
+
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 14px;
+      padding: 22px;
+    }
+
+    .card-label {
+      color: #94a3b8;
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+
+    .card-value {
+      font-size: 32px;
+      font-weight: bold;
+    }
+
+    section {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 14px;
+      padding: 24px;
+      margin-bottom: 25px;
+      overflow-x: auto;
+    }
+
+    h2 {
+      margin-top: 0;
+      font-size: 21px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 700px;
+    }
+
+    th,
+    td {
+      text-align: left;
+      padding: 13px 10px;
+      border-bottom: 1px solid #334155;
+    }
+
+    th {
+      color: #94a3b8;
+      font-size: 13px;
+      text-transform: uppercase;
+    }
+
+    .status {
+      color: #38bdf8;
+      margin-bottom: 20px;
+    }
+
+    .error {
+      color: #f87171;
+    }
+
+    .empty {
+      color: #94a3b8;
+      padding: 20px 0;
+    }
+
+    @media (max-width: 800px) {
+      .cards {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+
+    @media (max-width: 500px) {
+      .cards {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <header>
+    <div>
+      <h1>AI Money Lab Analytics</h1>
+      <div class="subtitle">
+        Traffic, engagement and campaign performance
+      </div>
+    </div>
+
+    <a class="back" href="/">← Back to AI Money Lab</a>
+  </header>
+
+  <div id="status" class="status">
+    Loading analytics...
+  </div>
+
+  <div class="cards">
+
+    <div class="card">
+      <div class="card-label">Visitors</div>
+      <div id="visitors" class="card-value">—</div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Page Views</div>
+      <div id="pageViews" class="card-value">—</div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Clicks</div>
+      <div id="clicks" class="card-value">—</div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Conversion Rate</div>
+      <div id="conversionRate" class="card-value">—</div>
+    </div>
+
+  </div>
+
+  <section>
+    <h2>Campaign Performance</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Campaign</th>
+          <th>Platform</th>
+          <th>Content</th>
+          <th>Views</th>
+          <th>Clicks</th>
+          <th>Conversions</th>
+          <th>Rate</th>
+        </tr>
+      </thead>
+
+      <tbody id="campaignTable">
+      </tbody>
+    </table>
+  </section>
+
+</div>
+
+<script>
+
+async function loadAnalytics() {
+
+  const status = document.getElementById("status");
+
+  try {
+
+    /*
+      IMPORTANT:
+      Do NOT put your Azure Function key in this file.
+    */
+
+    const response = await fetch("/api/analytics-dashboard");
+
+    if (!response.ok) {
+      throw new Error(
+        "Analytics API returned HTTP " + response.status
+      );
+    }
+
+    const result = await response.json();
+
+    if (!result.success) {
+      throw new Error(
+        result.error || "Analytics request failed"
+      );
+    }
+
+    const data = result.data || [];
+
+    let visitors = 0;
+    let pageViews = 0;
+    let clicks = 0;
+    let conversions = 0;
+
+    data.forEach(row => {
+
+      pageViews += Number(row.page_views || 0);
+      clicks += Number(row.clicks || 0);
+      conversions += Number(row.conversions || 0);
+
+    });
+
+    /*
+      The current analytics endpoint is campaign grouped,
+      so visitors cannot be calculated directly from it.
+      We will add a dedicated visitor metric in the next
+      backend step.
+    */
+
+    document.getElementById("visitors").textContent = "—";
+
+    document.getElementById("pageViews").textContent =
+      pageViews.toLocaleString();
+
+    document.getElementById("clicks").textContent =
+      clicks.toLocaleString();
+
+    const conversionRate =
+      clicks > 0
+        ? ((conversions / clicks) * 100).toFixed(2)
+        : "0.00";
+
+    document.getElementById("conversionRate").textContent =
+      conversionRate + "%";
+
+    const table =
+      document.getElementById("campaignTable");
+
+    table.innerHTML = "";
+
+    if (data.length === 0) {
+
+      table.innerHTML = `
+        <tr>
+          <td colspan="7" class="empty">
+            No analytics data available.
+          </td>
+        </tr>
+      `;
+
+    } else {
+
+      data.forEach(row => {
+
+        const tr = document.createElement("tr");
+
+        tr.innerHTML = `
+          <td>${escapeHtml(row.campaign)}</td>
+          <td>${escapeHtml(row.platform)}</td>
+          <td>${escapeHtml(row.content)}</td>
+          <td>${Number(row.page_views || 0).toLocaleString()}</td>
+          <td>${Number(row.clicks || 0).toLocaleString()}</td>
+          <td>${Number(row.conversions || 0).toLocaleString()}</td>
+          <td>${Number(row.conversion_rate || 0).toFixed(2)}%</td>
+        `;
+
+        table.appendChild(tr);
+
+      });
+
+    }
+
+    status.textContent =
+      "Analytics loaded successfully.";
+
+  } catch (error) {
+
+    console.error(error);
+
+    status.textContent =
+      "Unable to load analytics: " + error.message;
+
+    status.className = "status error";
+
+  }
+
+}
+
+
+function escapeHtml(value) {
+
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+
+}
+
+
+loadAnalytics();
+
+</script>
+
+</body>
+</html>
