@@ -1,3 +1,23 @@
+<!-- AI MONEY LAB CUSTOMER AUTHENTICATION -->
+<script src="https://alcdn.msauth.net/browser/2.38.1/js/msal-browser.min.js"></script>
+
+<script>
+  const msalConfig = {
+    auth: {
+      clientId: "34a17cbc-44d7-465a-991c-42f8e33324ae",
+      authority: "https://login.microsoftonline.com/common",
+      redirectUri: "https://lively-flower-0e8e4f00f.7.azurestaticapps.net/"
+    },
+    cache: {
+      cacheLocation: "sessionStorage",
+      storeAuthStateInCookie: false
+    }
+  };
+
+  const msalInstance =
+    new msal.PublicClientApplication(msalConfig);
+</script>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -836,3 +856,119 @@
 
 </body>
 </html>
+
+<!-- AI MONEY LAB CUSTOMER AUTHENTICATION -->
+
+<div id="customer-auth" style="text-align: right; padding: 20px;">
+
+  <button
+    id="signInButton"
+    type="button"
+    onclick="signInCustomer()"
+    style="
+      padding: 10px 18px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 700;
+    "
+  >
+    Sign In / Sign Up
+  </button>
+
+  <span id="customerInfo" style="display: none; margin-left: 12px;">
+
+    <span id="customerName"></span>
+
+    <button
+      type="button"
+      onclick="signOutCustomer()"
+      style="
+        margin-left: 10px;
+        padding: 8px 14px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+      "
+    >
+      Sign Out
+    </button>
+
+  </span>
+
+</div>
+
+<script>
+  async function signInCustomer() {
+    try {
+      const response = await msalInstance.loginPopup({
+        scopes: [
+          "openid",
+          "profile",
+          "email"
+        ]
+      });
+
+      msalInstance.setActiveAccount(response.account);
+
+      displayCustomer(response.account);
+
+    } catch (error) {
+      console.error(
+        "AI Money Lab sign-in failed:",
+        error
+      );
+
+      alert(
+        "Sign-in failed. Please try again."
+      );
+    }
+  }
+
+  function displayCustomer(account) {
+    if (!account) {
+      return;
+    }
+
+    document.getElementById(
+      "signInButton"
+    ).style.display = "none";
+
+    document.getElementById(
+      "customerInfo"
+    ).style.display = "inline";
+
+    document.getElementById(
+      "customerName"
+    ).textContent =
+      account.name || account.username;
+  }
+
+  async function signOutCustomer() {
+    const account =
+      msalInstance.getActiveAccount();
+
+    if (account) {
+      await msalInstance.logoutPopup({
+        account: account
+      });
+    }
+  }
+
+  function restoreCustomerSession() {
+    const accounts =
+      msalInstance.getAllAccounts();
+
+    if (accounts.length > 0) {
+      msalInstance.setActiveAccount(
+        accounts[0]
+      );
+
+      displayCustomer(accounts[0]);
+    }
+  }
+
+  restoreCustomerSession();
+</script>
+
+<!-- END AI MONEY LAB CUSTOMER AUTHENTICATION -->
