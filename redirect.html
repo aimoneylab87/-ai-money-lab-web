@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Authentication Redirect</title>
+</head>
+<body>
+  <p>Processing authentication...</p>
+
+  <script type="module">
+    import {
+      broadcastResponseToMainFrame
+    } from "https://cdn.jsdelivr.net/npm/@azure/msal-browser@5.0.1/redirect-bridge/+esm";
+
+    broadcastResponseToMainFrame().catch((error) => {
+      console.error(
+        "MSAL redirect bridge error:",
+        error
+      );
+    });
+  </script>
+</body>
+</html>
