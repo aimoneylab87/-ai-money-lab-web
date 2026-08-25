@@ -27,21 +27,42 @@
 
     await msalInstance.initialize();
 
-    const redirectResponse =
-      await msalInstance.handleRedirectPromise();
+    try {
+      const redirectResponse =
+        await msalInstance.handleRedirectPromise();
 
-    if (redirectResponse && redirectResponse.account) {
-      msalInstance.setActiveAccount(
-        redirectResponse.account
+      if (redirectResponse && redirectResponse.account) {
+        msalInstance.setActiveAccount(
+          redirectResponse.account
+        );
+      }
+    } catch (redirectError) {
+      console.error(
+        "AI Money Lab redirect processing failed:",
+        redirectError
       );
+
+      if (
+        redirectError &&
+        redirectError.errorCode === "invalid_scope"
+      ) {
+        console.warn(
+          "Ignoring stale invalid MSAL redirect response."
+        );
+      } else {
+        throw redirectError;
+      }
     }
 
     msalInitialized = true;
 
-    const accounts = msalInstance.getAllAccounts();
+    const accounts =
+      msalInstance.getAllAccounts();
 
     if (accounts.length > 0) {
-      msalInstance.setActiveAccount(accounts[0]);
+      msalInstance.setActiveAccount(
+        accounts[0]
+      );
     }
   }
 </script>
