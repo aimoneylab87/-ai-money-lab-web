@@ -1006,15 +1006,20 @@
       await msalInstance.loginRedirect(loginScopes);
 
     } catch (error) {
-      console.error(
-        "AI Money Lab sign-in failed:",
-        error
-      );
+      console.error("AI Money Lab sign-in failed:", error);
+      console.error("MSAL error name:", error?.name);
+      console.error("MSAL error code:", error?.errorCode);
+      console.error("MSAL error message:", error?.errorMessage);
+      console.error("MSAL error:", error);
 
       signInInProgress = false;
 
       alert(
-        "Sign-in failed. Please try again."
+        "Sign-in failed: " +
+        (error?.errorMessage ||
+         error?.message ||
+         error?.errorCode ||
+         "Unknown authentication error")
       );
     }
   }
