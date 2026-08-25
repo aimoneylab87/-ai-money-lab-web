@@ -27,6 +27,15 @@
 
     await msalInstance.initialize();
 
+    const redirectResponse =
+      await msalInstance.handleRedirectPromise();
+
+    if (redirectResponse && redirectResponse.account) {
+      msalInstance.setActiveAccount(
+        redirectResponse.account
+      );
+    }
+
     msalInitialized = true;
 
     const accounts = msalInstance.getAllAccounts();
