@@ -899,37 +899,17 @@
 </div>
 
 <script>
-  const apiScopes = {
-    scopes: [
-      "openid",
-      "profile",
-      "email",
-      "api://c392793a-e1fb-4771-a579-7bb8128cb652/access_as_user"
-    ]
-  };
-
   async function signInCustomer() {
     try {
-      const response = await msalInstance.loginPopup(apiScopes);
+      const response = await msalInstance.loginPopup({
+        scopes: [
+          "openid",
+          "profile",
+          "email"
+        ]
+      });
 
       msalInstance.setActiveAccount(response.account);
-
-      const tokenResponse =
-        await msalInstance.acquireTokenSilent({
-          scopes: [
-            "api://c392793a-e1fb-4771-a579-7bb8128cb652/access_as_user"
-          ],
-          account: response.account
-        });
-
-      console.log(
-        "AI Money Lab API access token acquired."
-      );
-
-      sessionStorage.setItem(
-        "ai_money_lab_api_token",
-        tokenResponse.accessToken
-      );
 
       displayCustomer(response.account);
 
