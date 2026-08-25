@@ -927,11 +927,16 @@
 </div>
 
 <script>
-  const apiScopes = {
+  const loginScopes = {
     scopes: [
       "openid",
       "profile",
-      "email",
+      "email"
+    ]
+  };
+
+  const apiScopes = {
+    scopes: [
       "api://c392793a-e1fb-4771-a579-7bb8128cb652/access_as_user"
     ]
   };
@@ -977,7 +982,7 @@
         return;
       }
 
-      await msalInstance.loginRedirect(apiScopes);
+      await msalInstance.loginRedirect(loginScopes);
 
     } catch (error) {
       console.error(
