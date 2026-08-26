@@ -18,6 +18,8 @@
   const msalInstance =
     new msal.PublicClientApplication(msalConfig);
 
+  window.aiMoneyLabMsal = msalInstance;
+
   let msalInitialized = false;
   let signInInProgress = false;
 
