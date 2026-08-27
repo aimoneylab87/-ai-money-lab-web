@@ -1,13 +1,11 @@
-<!DOCTYPE html>
-<!-- AI MONEY LAB CUSTOMER AUTHENTICATION -->
 <script src="https://alcdn.msauth.net/browser/2.38.1/js/msal-browser.min.js"></script>
 
 <script>
   const msalConfig = {
     auth: {
-      clientId: "612c7266-6a69-4488-8883-fa4901eee1eb",
+      clientId: "34a17cbc-44d7-465a-991c-42f8e33324ae",
       authority: "https://login.microsoftonline.com/common",
-      redirectUri: "https://lively-flower-0e8e4f00f.7.azurestaticapps.net/auth/callback"
+      redirectUri: "https://lively-flower-0e8e4f00f.7.azurestaticapps.net/"
     },
     cache: {
       cacheLocation: "sessionStorage",
@@ -17,59 +15,9 @@
 
   const msalInstance =
     new msal.PublicClientApplication(msalConfig);
-
-  window.aiMoneyLabMsal = msalInstance;
-
-  let msalInitialized = false;
-  let signInInProgress = false;
-
-  async function initializeMSAL() {
-    if (msalInitialized) {
-      return;
-    }
-
-    await msalInstance.initialize();
-
-    try {
-      const redirectResponse =
-        await msalInstance.handleRedirectPromise();
-
-      if (redirectResponse && redirectResponse.account) {
-        msalInstance.setActiveAccount(
-          redirectResponse.account
-        );
-      }
-    } catch (redirectError) {
-      console.error(
-        "AI Money Lab redirect processing failed:",
-        redirectError
-      );
-
-      if (
-        redirectError &&
-        redirectError.errorCode === "invalid_scope"
-      ) {
-        console.warn(
-          "Ignoring stale invalid MSAL redirect response."
-        );
-      } else {
-        throw redirectError;
-      }
-    }
-
-    msalInitialized = true;
-
-    const accounts =
-      msalInstance.getAllAccounts();
-
-    if (accounts.length > 0) {
-      msalInstance.setActiveAccount(
-        accounts[0]
-      );
-    }
-  }
 </script>
 
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -905,8 +853,7 @@
     </div>
   </section>
 
-</body>
-</html>
+
 
 <!-- AI MONEY LAB CUSTOMER AUTHENTICATION -->
 
@@ -950,78 +897,28 @@
 </div>
 
 <script>
-  const loginScopes = {
-    scopes: [
-      "openid",
-      "profile",
-      "email"
-    ]
-  };
-
-  const apiScopes = {
-    scopes: [
-      "api://c392793a-e1fb-4771-a579-7bb8128cb652/access_as_user"
-    ]
-  };
-
   async function signInCustomer() {
-    if (signInInProgress) {
-      console.log("Customer sign-in already in progress.");
-      return;
-    }
-
-    signInInProgress = true;
-
     try {
-      await initializeMSAL();
+      const response = await msalInstance.loginPopup({
+        scopes: [
+          "openid",
+          "profile",
+          "email"
+        ]
+      });
 
-      const accounts = msalInstance.getAllAccounts();
+      msalInstance.setActiveAccount(response.account);
 
-      if (accounts.length > 0) {
-        const account = accounts[0];
-
-        msalInstance.setActiveAccount(account);
-
-        const tokenResponse =
-          await msalInstance.acquireTokenSilent({
-            scopes: [
-              "api://c392793a-e1fb-4771-a579-7bb8128cb652/access_as_user"
-            ],
-            account: account
-          });
-
-        sessionStorage.setItem(
-          "ai_money_lab_api_token",
-          tokenResponse.accessToken
-        );
-
-        displayCustomer(account);
-
-        console.log(
-          "AI Money Lab customer session restored."
-        );
-
-        signInInProgress = false;
-        return;
-      }
-
-      await msalInstance.loginRedirect(loginScopes);
+      displayCustomer(response.account);
 
     } catch (error) {
-      console.error("AI Money Lab sign-in failed:", error);
-      console.error("MSAL error name:", error?.name);
-      console.error("MSAL error code:", error?.errorCode);
-      console.error("MSAL error message:", error?.errorMessage);
-      console.error("MSAL error:", error);
-
-      signInInProgress = false;
+      console.error(
+        "AI Money Lab sign-in failed:",
+        error
+      );
 
       alert(
-        "Sign-in failed: " +
-        (error?.errorMessage ||
-         error?.message ||
-         error?.errorCode ||
-         "Unknown authentication error")
+        "Sign-in failed. Please try again."
       );
     }
   }
@@ -1046,49 +943,26 @@
   }
 
   async function signOutCustomer() {
-    try {
-      await initializeMSAL();
+    const account =
+      msalInstance.getActiveAccount();
 
-      const account =
-        msalInstance.getActiveAccount();
-
-      if (account) {
-        await msalInstance.logoutPopup({
-          account: account
-        });
-      }
-
-      sessionStorage.removeItem(
-        "ai_money_lab_api_token"
-      );
-
-    } catch (error) {
-      console.error(
-        "AI Money Lab sign-out failed:",
-        error
-      );
+    if (account) {
+      await msalInstance.logoutPopup({
+        account: account
+      });
     }
   }
 
-  async function restoreCustomerSession() {
-    try {
-      await initializeMSAL();
+  function restoreCustomerSession() {
+    const accounts =
+      msalInstance.getAllAccounts();
 
-      const accounts =
-        msalInstance.getAllAccounts();
-
-      if (accounts.length > 0) {
-        const account = accounts[0];
-
-        msalInstance.setActiveAccount(account);
-
-        displayCustomer(account);
-      }
-    } catch (error) {
-      console.error(
-        "AI Money Lab session restore failed:",
-        error
+    if (accounts.length > 0) {
+      msalInstance.setActiveAccount(
+        accounts[0]
       );
+
+      displayCustomer(accounts[0]);
     }
   }
 
@@ -1096,3 +970,6 @@
 </script>
 
 <!-- END AI MONEY LAB CUSTOMER AUTHENTICATION -->
+
+</body>
+</html>
