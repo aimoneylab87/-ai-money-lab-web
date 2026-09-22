@@ -158,6 +158,11 @@
   <div id="subscriptionStatus" style="margin-top:4px; color:#6b7280;">Subscription status: Inactive</div>
 </div>
 
+<div id="planSelection" style="margin-bottom:20px; padding:16px; border:1px solid #e5e7eb; border-radius:8px; background:#ffffff;">
+  <div style="font-size:18px; font-weight:600; margin-bottom:12px;">Available Plans</div>
+  <div id="planOptions" style="display:grid; gap:12px;"></div>
+</div>
+
 <div id="status" class="status">
   Loading analytics...
 </div>
@@ -286,6 +291,24 @@
         stripePriceId: null
       }
     ];
+
+    function renderPlanOptions() {
+      const container = document.getElementById("planOptions");
+
+      container.innerHTML = BILLING_PLANS.map(plan => `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; border:1px solid #e5e7eb; border-radius:6px;">
+          <div>
+            <strong>${plan.name}</strong>
+            <div style="color:#6b7280; margin-top:3px;">
+              ${plan.priceMonthly === 0 ? "Free" : "$" + plan.priceMonthly + "/month"}
+            </div>
+          </div>
+          <button type="button" disabled style="padding:8px 12px; cursor:not-allowed;">
+            Checkout unavailable
+          </button>
+        </div>
+      `).join("");
+    }
 
     async function loadAnalytics() {
 
@@ -460,6 +483,8 @@
 
       document.getElementById("customerName").textContent =
         window.currentCustomer.name;
+
+      renderPlanOptions();
 
       return true;
     }
