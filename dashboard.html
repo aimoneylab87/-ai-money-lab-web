@@ -260,6 +260,33 @@
 
   <script>
 
+    const BILLING_PLANS = [
+      {
+        id: "free",
+        name: "Free",
+        priceMonthly: 0,
+        stripePriceId: null
+      },
+      {
+        id: "starter",
+        name: "Starter",
+        priceMonthly: 29,
+        stripePriceId: null
+      },
+      {
+        id: "growth",
+        name: "Growth",
+        priceMonthly: 79,
+        stripePriceId: null
+      },
+      {
+        id: "pro",
+        name: "Pro",
+        priceMonthly: 199,
+        stripePriceId: null
+      }
+    ];
+
     async function loadAnalytics() {
 
       const status = document.getElementById("status");
