@@ -234,7 +234,7 @@
       try {
 
         const response =
-          await fetch("/api/analytics-dashboard");
+          await fetch("https://func-ai-money-lab.azurewebsites.net/api/analytics-dashboard");
 
         if (!response.ok) {
           throw new Error(
@@ -253,25 +253,38 @@
           );
         }
 
-        const totals =
-          result.totals || {};
+        const events = result.events || [];
+
+        const pageViews =
+          events.find(row => row.event === "page_view")?.count || 0;
+
+        const clicks =
+          events.find(row => row.event === "click")?.count || 0;
+
+        const conversions =
+          events.find(row => row.event === "conversion")?.count || 0;
+
+        const conversionRate =
+          pageViews > 0
+            ? (conversions / pageViews) * 100
+            : 0;
 
         document.getElementById("pageViews").textContent =
-          Number(totals.page_views || 0);
+          Number(pageViews);
 
         document.getElementById("clicks").textContent =
-          Number(totals.clicks || 0);
+          Number(clicks);
 
         document.getElementById("conversions").textContent =
-          Number(totals.conversions || 0);
+          Number(conversions);
 
         document.getElementById("conversionRate").textContent =
-          Number(totals.conversion_rate || 0) + "%";
+          conversionRate.toFixed(2) + "%";
 
         renderTable(
           "platformTable",
-          result.platforms || [],
-          "platform"
+          result.sources || [],
+          "source"
         );
 
         renderTable(
@@ -282,7 +295,7 @@
 
         renderTable(
           "contentTable",
-          result.content || [],
+          [],
           "content"
         );
 
