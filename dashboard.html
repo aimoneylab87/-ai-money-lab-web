@@ -292,22 +292,87 @@
       }
     ];
 
+    async function selectPlan(planId) {
+      const customer = window.currentCustomer;
+
+      if (!customer) {
+        alert("Customer session is not available.");
+        return;
+      }
+
+      const plan = BILLING_PLANS.find(item => item.id === planId);
+
+      if (!plan) {
+        alert("Invalid plan selected.");
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          "https://func-ai-money-lab-billing.azurewebsites.net/api/billing/customer",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              email: customer.email,
+              name: customer.name,
+              plan: plan.id
+            })
+          }
+        );
+
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+          throw new Error(
+            result.error || "Unable to update customer plan."
+          );
+        }
+
+        document.getElementById("customerPlan").textContent =
+          result.customer.plan.charAt(0).toUpperCase() +
+          result.customer.plan.slice(1);
+
+        document.getElementById("subscriptionStatus").textContent =
+          "Subscription status: " +
+          result.customer.subscription_status;
+
+        renderPlanOptions();
+      } catch (error) {
+        console.error("Plan selection failed:", error);
+        alert(error.message || "Unable to update customer plan.");
+      }
+    }
+
     function renderPlanOptions() {
       const container = document.getElementById("planOptions");
+      const currentPlan =
+        document.getElementById("customerPlan").textContent.toLowerCase();
 
-      container.innerHTML = BILLING_PLANS.map(plan => `
-        <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; border:1px solid #e5e7eb; border-radius:6px;">
-          <div>
-            <strong>${plan.name}</strong>
-            <div style="color:#6b7280; margin-top:3px;">
-              ${plan.priceMonthly === 0 ? "Free" : "$" + plan.priceMonthly + "/month"}
+      container.innerHTML = BILLING_PLANS.map(plan => {
+        const isCurrentPlan = plan.id === currentPlan;
+
+        return `
+          <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; border:1px solid #e5e7eb; border-radius:6px;">
+            <div>
+              <strong>${plan.name}</strong>
+              <div style="color:#6b7280; margin-top:3px;">
+                ${plan.priceMonthly === 0 ? "Free" : "$" + plan.priceMonthly + "/month"}
+              </div>
             </div>
+            <button
+              type="button"
+              ${isCurrentPlan ? "disabled" : ""}
+              onclick="selectPlan('${plan.id}')"
+              style="padding:8px 12px; cursor:${isCurrentPlan ? "not-allowed" : "pointer"};"
+            >
+              ${isCurrentPlan ? "Current Plan" : "Select Plan"}
+            </button>
           </div>
-          <button type="button" disabled style="padding:8px 12px; cursor:not-allowed;">
-            Checkout unavailable
-          </button>
-        </div>
-      `).join("");
+        `;
+      }).join("");
     }
 
     async function loadAnalytics() {
