@@ -419,8 +419,14 @@
 
       msalInstance.setActiveAccount(account);
 
+      window.currentCustomer = {
+        id: account.homeAccountId,
+        email: account.username,
+        name: account.name || account.username
+      };
+
       document.getElementById("customerName").textContent =
-        account.name || account.username;
+        window.currentCustomer.name;
 
       return true;
     }
