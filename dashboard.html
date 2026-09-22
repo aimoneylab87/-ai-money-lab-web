@@ -2,6 +2,24 @@
 
 <html lang="en">
 <head>
+  <script src="https://alcdn.msauth.net/browser/2.38.1/js/msal-browser.min.js"></script>
+
+  <script>
+    const msalConfig = {
+      auth: {
+        clientId: "34a17cbc-44d7-465a-991c-42f8e33324ae",
+        authority: "https://login.microsoftonline.com/common",
+        redirectUri: "https://lively-flower-0e8e4f00f.7.azurestaticapps.net/dashboard.html"
+      },
+      cache: {
+        cacheLocation: "sessionStorage",
+        storeAuthStateInCookie: false
+      }
+    };
+
+    const msalInstance =
+      new msal.PublicClientApplication(msalConfig);
+  </script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI Money Lab Analytics</title>
@@ -117,6 +135,15 @@
 <body>
 
   <div class="container">
+
+    <div id="customerBar" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; padding:12px 16px; background:#f5f5f5; border-radius:8px;">
+      <span>
+        Signed in as <strong id="customerName">Customer</strong>
+      </span>
+      <button id="signOutButton" type="button" onclick="signOutCustomer()">
+        Sign Out
+      </button>
+    </div>
 
 ```
 <h1>AI Money Lab Analytics</h1>
@@ -378,7 +405,50 @@
     }
 
 
-    loadAnalytics();
+    async function initializeCustomerAuth() {
+
+      const accounts = msalInstance.getAllAccounts();
+
+      if (accounts.length === 0) {
+        window.location.href = "/";
+        return false;
+      }
+
+      const account =
+        msalInstance.getActiveAccount() || accounts[0];
+
+      msalInstance.setActiveAccount(account);
+
+      document.getElementById("customerName").textContent =
+        account.name || account.username;
+
+      return true;
+    }
+
+
+    async function signOutCustomer() {
+
+      const account =
+        msalInstance.getActiveAccount();
+
+      if (account) {
+        await msalInstance.logoutPopup({
+          account: account
+        });
+
+        window.location.href = "/";
+      }
+    }
+
+
+    initializeCustomerAuth().then(isAuthenticated => {
+
+      if (isAuthenticated) {
+        loadAnalytics();
+      }
+
+    });
+
 
   </script>
 
