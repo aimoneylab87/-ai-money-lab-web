@@ -817,6 +817,144 @@ def campaign_click(req: func.HttpRequest) -> func.HttpResponse:
             "error": "Click tracking operation failed",
         }, 500)
 
+
+@app.route(
+    route="conversions",
+    methods=["POST", "OPTIONS"],
+)
+def conversion(req: func.HttpRequest) -> func.HttpResponse:
+    if req.method == "OPTIONS":
+        return json_response({}, 204)
+
+    try:
+        body = req.get_json()
+    except ValueError:
+        return json_response({
+            "success": False,
+            "error": "Invalid JSON",
+        }, 400)
+
+    campaign_id = str(
+        body.get("campaign_id", "")
+    ).strip()
+
+    if not campaign_id:
+        return json_response({
+            "success": False,
+            "error": "campaign_id is required",
+        }, 400)
+
+    session_id = (
+        str(body.get("session_id", "")).strip()
+        or None
+    )
+
+    try:
+        revenue = float(body.get("revenue", 0))
+    except (TypeError, ValueError):
+        return json_response({
+            "success": False,
+            "error": "revenue must be a number",
+        }, 400)
+
+    if revenue < 0:
+        return json_response({
+            "success": False,
+            "error": "revenue cannot be negative",
+        }, 400)
+
+    currency = (
+        str(body.get("currency", "USD")).strip().upper()
+        or "USD"
+    )
+
+    if len(currency) != 3:
+        return json_response({
+            "success": False,
+            "error": "currency must be a 3-letter code",
+        }, 400)
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, customer_id, name, status
+                    FROM campaigns
+                    WHERE id = %s
+                    """,
+                    (campaign_id,),
+                )
+
+                campaign = cur.fetchone()
+
+                if not campaign:
+                    return json_response({
+                        "success": False,
+                        "error": "Campaign not found",
+                    }, 404)
+
+                if campaign[3] != "active":
+                    return json_response({
+                        "success": False,
+                        "error": "Campaign is not active",
+                    }, 403)
+
+                cur.execute(
+                    """
+                    INSERT INTO traffic_events (
+                        event,
+                        source,
+                        medium,
+                        campaign,
+                        landing_page,
+                        page_url,
+                        session_id,
+                        destination,
+                        revenue,
+                        currency,
+                        customer_id
+                    )
+                    VALUES (
+                        %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s
+                    )
+                    RETURNING id, created_at
+                    """,
+                    (
+                        "conversion",
+                        "ai_money_lab",
+                        "campaign",
+                        str(campaign[0]),
+                        "/api/conversions",
+                        req.url,
+                        session_id,
+                        campaign[2],
+                        revenue,
+                        currency,
+                        str(campaign[1]),
+                    ),
+                )
+
+                row = cur.fetchone()
+
+        return json_response({
+            "success": True,
+            "id": str(row[0]),
+            "campaign_id": str(campaign[0]),
+            "customer_id": str(campaign[1]),
+            "revenue": revenue,
+            "currency": currency,
+            "created_at": row[1].isoformat(),
+        }, 200)
+
+    except Exception:
+        return json_response({
+            "success": False,
+            "error": "Conversion operation failed",
+        }, 500)
+
+
 @app.route(
     route="analytics-dashboard",
     methods=["GET", "OPTIONS"],
