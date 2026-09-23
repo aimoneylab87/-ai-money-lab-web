@@ -3,3 +3,6 @@ __pycache__/
 *.pyc
 .env
 local.settings.json
+
+# Stripe secrets
+.env
