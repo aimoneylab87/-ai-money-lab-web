@@ -613,6 +613,210 @@ def track(req: func.HttpRequest) -> func.HttpResponse:
         }, 500)
 
 
+
+@app.route(
+    route="campaigns/{campaign_id}/tracking-url",
+    methods=["GET", "OPTIONS"],
+)
+def campaign_tracking_url(
+    req: func.HttpRequest,
+) -> func.HttpResponse:
+    if req.method == "OPTIONS":
+        return json_response({}, 204)
+
+    campaign_id = str(
+        req.route_params.get("campaign_id", "")
+    ).strip()
+
+    customer_id = str(
+        req.params.get("customer_id", "")
+    ).strip()
+
+    if not campaign_id:
+        return json_response({
+            "success": False,
+            "error": "campaign_id is required",
+        }, 400)
+
+    if not customer_id:
+        return json_response({
+            "success": False,
+            "error": "customer_id is required",
+        }, 400)
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, customer_id, name, destination_url
+                    FROM campaigns
+                    WHERE id = %s
+                      AND customer_id = %s
+                    """,
+                    (campaign_id, customer_id),
+                )
+
+                row = cur.fetchone()
+
+                if not row:
+                    return json_response({
+                        "success": False,
+                        "error": "Campaign not found",
+                    }, 404)
+
+                tracking_base = (
+                    os.getenv(
+                        "TRACKING_BASE_URL",
+                        "https://func-ai-money-lab-billing.azurewebsites.net",
+                    )
+                    .rstrip("/")
+                )
+
+                from urllib.parse import urlencode
+
+                query = urlencode({
+                    "campaign_id": str(row[0]),
+                    "utm_source": "ai_money_lab",
+                    "utm_medium": "campaign",
+                    "utm_campaign": str(row[0]),
+                })
+
+                tracking_url = (
+                    f"{tracking_base}/api/click?{query}"
+                )
+
+                return json_response({
+                    "success": True,
+                    "campaign_id": str(row[0]),
+                    "campaign_name": row[2],
+                    "destination_url": row[3],
+                    "tracking_url": tracking_url,
+                })
+
+    except Exception:
+        return json_response({
+            "success": False,
+            "error": "Tracking URL operation failed",
+        }, 500)
+
+
+@app.route(
+    route="click",
+    methods=["GET", "OPTIONS"],
+)
+def campaign_click(req: func.HttpRequest) -> func.HttpResponse:
+    if req.method == "OPTIONS":
+        return json_response({}, 204)
+
+    campaign_id = str(
+        req.params.get("campaign_id", "")
+    ).strip()
+
+    if not campaign_id:
+        return json_response({
+            "success": False,
+            "error": "campaign_id is required",
+        }, 400)
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, customer_id, destination_url, status
+                    FROM campaigns
+                    WHERE id = %s
+                    """,
+                    (campaign_id,),
+                )
+
+                campaign = cur.fetchone()
+
+                if not campaign:
+                    return json_response({
+                        "success": False,
+                        "error": "Campaign not found",
+                    }, 404)
+
+                if campaign[3] != "active":
+                    return json_response({
+                        "success": False,
+                        "error": "Campaign is not active",
+                    }, 403)
+
+                source = (
+                    str(req.params.get("utm_source", "")).strip()
+                    or "ai_money_lab"
+                )
+                medium = (
+                    str(req.params.get("utm_medium", "")).strip()
+                    or "campaign"
+                )
+                campaign_name = (
+                    str(req.params.get("utm_campaign", "")).strip()
+                    or campaign_id
+                )
+                content = (
+                    str(req.params.get("utm_content", "")).strip()
+                    or None
+                )
+
+                session_id = (
+                    str(req.params.get("session_id", "")).strip()
+                    or None
+                )
+
+                cur.execute(
+                    """
+                    INSERT INTO traffic_events (
+                        event,
+                        source,
+                        medium,
+                        campaign,
+                        content,
+                        landing_page,
+                        page_url,
+                        session_id,
+                        destination,
+                        customer_id
+                    )
+                    VALUES (
+                        %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s
+                    )
+                    RETURNING id, created_at
+                    """,
+                    (
+                        "click",
+                        source,
+                        medium,
+                        campaign_name,
+                        content,
+                        "/api/click",
+                        req.url,
+                        session_id,
+                        campaign[2],
+                        str(campaign[1]),
+                    ),
+                )
+
+                event = cur.fetchone()
+
+        return func.HttpResponse(
+            status_code=302,
+            headers={
+                "Location": campaign[2],
+                "Cache-Control": "no-store",
+            },
+        )
+
+    except Exception:
+        return json_response({
+            "success": False,
+            "error": "Click tracking operation failed",
+        }, 500)
+
 @app.route(
     route="analytics-dashboard",
     methods=["GET", "OPTIONS"],
