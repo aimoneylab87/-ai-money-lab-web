@@ -381,8 +381,13 @@
 
       try {
 
+        const customerId = window.currentCustomer?.id || "";
+
         const response =
-          await fetch("https://func-ai-money-lab.azurewebsites.net/api/analytics-dashboard");
+          await fetch(
+            "https://func-ai-money-lab-billing.azurewebsites.net/api/analytics-dashboard?customer_id=" +
+            encodeURIComponent(customerId)
+          );
 
         if (!response.ok) {
           throw new Error(
