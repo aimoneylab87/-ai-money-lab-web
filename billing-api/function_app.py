@@ -1079,6 +1079,78 @@ def analytics_dashboard(req: func.HttpRequest) -> func.HttpResponse:
 
                 totals = cur.fetchone()
 
+                cur.execute(
+                    f"""
+                    SELECT
+                        COALESCE(campaign, '(none)') AS campaign,
+                        COUNT(*) FILTER (
+                            WHERE event = 'click'
+                        ) AS clicks,
+                        COUNT(*) FILTER (
+                            WHERE event = 'conversion'
+                        ) AS conversions,
+                        COALESCE(
+                            SUM(
+                                CASE
+                                    WHEN event = 'conversion'
+                                    THEN revenue
+                                    ELSE 0
+                                END
+                            ),
+                            0
+                        ) AS revenue,
+                        COALESCE(SUM(cost), 0) AS cost
+                    FROM traffic_events
+                    {scope}
+                    GROUP BY campaign
+                    ORDER BY revenue DESC, clicks DESC
+                    """,
+                    params,
+                )
+
+                campaign_rows = cur.fetchall()
+
+                campaign_metrics = []
+
+                for row in campaign_rows:
+                    campaign = row[0]
+                    clicks = int(row[1] or 0)
+                    conversions = int(row[2] or 0)
+                    revenue = float(row[3] or 0)
+                    cost = float(row[4] or 0)
+
+                    conversion_rate = (
+                        (conversions / clicks) * 100
+                        if clicks > 0
+                        else 0
+                    )
+
+                    profit = revenue - cost
+
+                    roi = (
+                        (profit / cost) * 100
+                        if cost > 0
+                        else None
+                    )
+
+                    campaign_metrics.append({
+                        "campaign": campaign,
+                        "clicks": clicks,
+                        "conversions": conversions,
+                        "conversion_rate": round(
+                            conversion_rate,
+                            2,
+                        ),
+                        "revenue": round(revenue, 2),
+                        "cost": round(cost, 2),
+                        "profit": round(profit, 2),
+                        "roi": (
+                            round(roi, 2)
+                            if roi is not None
+                            else None
+                        ),
+                    })
+
         return json_response({
             "success": True,
             "customer_id": customer_id or None,
@@ -1088,6 +1160,7 @@ def analytics_dashboard(req: func.HttpRequest) -> func.HttpResponse:
             "events": events,
             "sources": sources,
             "campaigns": campaigns,
+            "campaign_metrics": campaign_metrics,
             "mediums": mediums,
         })
 
