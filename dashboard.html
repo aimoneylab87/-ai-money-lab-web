@@ -223,10 +223,13 @@
     <thead>
       <tr>
         <th>Campaign</th>
-        <th>Page Views</th>
         <th>Clicks</th>
         <th>Conversions</th>
         <th>Conversion Rate</th>
+        <th>Revenue</th>
+        <th>Cost</th>
+        <th>Profit</th>
+        <th>ROI</th>
       </tr>
     </thead>
 
@@ -440,10 +443,9 @@
           "source"
         );
 
-        renderTable(
+        renderCampaignMetrics(
           "campaignTable",
-          result.campaigns || [],
-          "campaign"
+          result.campaign_metrics || []
         );
 
         renderTable(
@@ -468,6 +470,62 @@
         status.classList.add("error");
 
       }
+
+    }
+
+
+    function renderCampaignMetrics(
+      tableId,
+      rows
+    ) {
+
+      const table =
+        document.getElementById(tableId);
+
+      table.innerHTML = "";
+
+      rows.forEach(row => {
+
+        const clicks =
+          Number(row.clicks || 0);
+
+        const conversions =
+          Number(row.conversions || 0);
+
+        const conversionRate =
+          Number(row.conversion_rate || 0);
+
+        const revenue =
+          Number(row.revenue || 0);
+
+        const cost =
+          Number(row.cost || 0);
+
+        const profit =
+          Number(row.profit || 0);
+
+        const roi =
+          row.roi === null || row.roi === undefined
+            ? "N/A"
+            : Number(row.roi).toFixed(2) + "%";
+
+        const tr =
+          document.createElement("tr");
+
+        tr.innerHTML = `
+          <td>${escapeHtml(row.campaign || "unknown")}</td>
+          <td>${clicks}</td>
+          <td>${conversions}</td>
+          <td>${conversionRate.toFixed(2)}%</td>
+          <td>$${revenue.toFixed(2)}</td>
+          <td>$${cost.toFixed(2)}</td>
+          <td>$${profit.toFixed(2)}</td>
+          <td>${roi}</td>
+        `;
+
+        table.appendChild(tr);
+
+      });
 
     }
 
