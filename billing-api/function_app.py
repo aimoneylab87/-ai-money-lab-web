@@ -512,3 +512,245 @@ def campaign_detail(
             "success": False,
             "error": "Campaign operation failed",
         }, 500)
+
+
+@app.route(route="track", methods=["POST", "OPTIONS"])
+def track(req: func.HttpRequest) -> func.HttpResponse:
+    if req.method == "OPTIONS":
+        return json_response({}, 204)
+
+    try:
+        body = req.get_json()
+    except ValueError:
+        return json_response({
+            "success": False,
+            "error": "Invalid JSON",
+        }, 400)
+
+    event = str(body.get("event", "")).strip()
+
+    if not event:
+        return json_response({
+            "success": False,
+            "error": "event is required",
+        }, 400)
+
+    customer_id = str(body.get("customer_id", "")).strip() or None
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                if customer_id:
+                    cur.execute(
+                        """
+                        SELECT id
+                        FROM customers
+                        WHERE id = %s
+                        """,
+                        (customer_id,),
+                    )
+
+                    if not cur.fetchone():
+                        return json_response({
+                            "success": False,
+                            "error": "Customer not found",
+                        }, 404)
+
+                cur.execute(
+                    """
+                    INSERT INTO traffic_events (
+                        event,
+                        source,
+                        medium,
+                        campaign,
+                        content,
+                        landing_page,
+                        referrer,
+                        page_url,
+                        session_id,
+                        destination,
+                        revenue,
+                        currency,
+                        cost,
+                        customer_id
+                    )
+                    VALUES (
+                        %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s, %s
+                    )
+                    RETURNING id, created_at
+                    """,
+                    (
+                        event,
+                        body.get("source"),
+                        body.get("medium"),
+                        body.get("campaign"),
+                        body.get("content"),
+                        body.get("landing_page"),
+                        body.get("referrer"),
+                        body.get("page_url"),
+                        body.get("session_id"),
+                        body.get("destination"),
+                        body.get("revenue", 0),
+                        body.get("currency", "USD"),
+                        body.get("cost", 0),
+                        customer_id,
+                    ),
+                )
+
+                row = cur.fetchone()
+
+        return json_response({
+            "success": True,
+            "id": str(row[0]),
+            "created_at": row[1].isoformat(),
+        }, 200)
+
+    except Exception:
+        return json_response({
+            "success": False,
+            "error": "Tracking operation failed",
+        }, 500)
+
+
+@app.route(
+    route="analytics-dashboard",
+    methods=["GET", "OPTIONS"],
+)
+def analytics_dashboard(req: func.HttpRequest) -> func.HttpResponse:
+    if req.method == "OPTIONS":
+        return json_response({}, 204)
+
+    customer_id = str(
+        req.params.get("customer_id", "")
+    ).strip()
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                if customer_id:
+                    cur.execute(
+                        """
+                        SELECT id
+                        FROM customers
+                        WHERE id = %s
+                        """,
+                        (customer_id,),
+                    )
+
+                    if not cur.fetchone():
+                        return json_response({
+                            "success": False,
+                            "error": "Customer not found",
+                        }, 404)
+
+                scope = "WHERE customer_id = %s" if customer_id else ""
+                params = (customer_id,) if customer_id else ()
+
+                cur.execute(
+                    f"""
+                    SELECT event, COUNT(*)
+                    FROM traffic_events
+                    {scope}
+                    GROUP BY event
+                    ORDER BY COUNT(*) DESC
+                    """,
+                    params,
+                )
+
+                events = [
+                    {
+                        "event": row[0],
+                        "count": row[1],
+                    }
+                    for row in cur.fetchall()
+                ]
+
+                cur.execute(
+                    f"""
+                    SELECT COALESCE(source, '(direct)'), COUNT(*)
+                    FROM traffic_events
+                    {scope}
+                    GROUP BY source
+                    ORDER BY COUNT(*) DESC
+                    """,
+                    params,
+                )
+
+                sources = [
+                    {
+                        "source": row[0],
+                        "count": row[1],
+                    }
+                    for row in cur.fetchall()
+                ]
+
+                cur.execute(
+                    f"""
+                    SELECT COALESCE(campaign, '(none)'), COUNT(*)
+                    FROM traffic_events
+                    {scope}
+                    GROUP BY campaign
+                    ORDER BY COUNT(*) DESC
+                    """,
+                    params,
+                )
+
+                campaigns = [
+                    {
+                        "campaign": row[0],
+                        "count": row[1],
+                    }
+                    for row in cur.fetchall()
+                ]
+
+                cur.execute(
+                    f"""
+                    SELECT COALESCE(medium, '(none)'), COUNT(*)
+                    FROM traffic_events
+                    {scope}
+                    GROUP BY medium
+                    ORDER BY COUNT(*) DESC
+                    """,
+                    params,
+                )
+
+                mediums = [
+                    {
+                        "medium": row[0],
+                        "count": row[1],
+                    }
+                    for row in cur.fetchall()
+                ]
+
+                cur.execute(
+                    f"""
+                    SELECT
+                        COUNT(*),
+                        COALESCE(SUM(revenue), 0),
+                        COALESCE(SUM(cost), 0)
+                    FROM traffic_events
+                    {scope}
+                    """,
+                    params,
+                )
+
+                totals = cur.fetchone()
+
+        return json_response({
+            "success": True,
+            "customer_id": customer_id or None,
+            "total_events": totals[0],
+            "total_revenue": float(totals[1]),
+            "total_cost": float(totals[2]),
+            "events": events,
+            "sources": sources,
+            "campaigns": campaigns,
+            "mediums": mediums,
+        })
+
+    except Exception:
+        return json_response({
+            "success": False,
+            "error": "Analytics operation failed",
+        }, 500)
