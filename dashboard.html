@@ -1204,14 +1204,38 @@
 
       msalInstance.setActiveAccount(account);
 
-      window.currentCustomer = {
-        id: account.homeAccountId,
-        email: account.username,
-        name: account.name || account.username
-      };
+      const customerResponse = await fetch(
+        "https://func-ai-money-lab-billing.azurewebsites.net/api/billing/customer",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            email: account.username,
+            name: account.name || account.username
+          })
+        }
+      );
+
+      const customerResult = await customerResponse.json();
+
+      if (
+        !customerResponse.ok ||
+        !customerResult.success ||
+        !customerResult.customer
+      ) {
+        throw new Error(
+          customerResult.error ||
+          "Unable to load AI Money Lab customer account."
+        );
+      }
+
+      window.currentCustomer = customerResult.customer;
 
       document.getElementById("customerName").textContent =
-        window.currentCustomer.name;
+        window.currentCustomer.name ||
+        window.currentCustomer.email;
 
       renderPlanOptions();
 
