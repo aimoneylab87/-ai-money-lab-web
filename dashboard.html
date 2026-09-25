@@ -216,6 +216,98 @@
 
 <div class="section">
 
+  <h2>Campaign Manager</h2>
+
+  <div id="campaignManagerStatus" class="status" style="margin-bottom:16px;">
+    Loading campaigns...
+  </div>
+
+  <form id="campaignForm" style="display:grid; gap:12px; margin-bottom:20px;">
+
+    <input
+      type="hidden"
+      id="campaignId"
+    />
+
+    <label>
+      <strong>Campaign Name</strong>
+      <input
+        id="campaignName"
+        type="text"
+        required
+        maxlength="200"
+        placeholder="Example: Facebook September Campaign"
+        style="width:100%; box-sizing:border-box; padding:10px; margin-top:5px; border:1px solid #d1d5db; border-radius:6px;"
+      />
+    </label>
+
+    <label>
+      <strong>Destination URL</strong>
+      <input
+        id="campaignDestination"
+        type="url"
+        required
+        placeholder="https://example.com"
+        style="width:100%; box-sizing:border-box; padding:10px; margin-top:5px; border:1px solid #d1d5db; border-radius:6px;"
+      />
+    </label>
+
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+
+      <button
+        id="campaignSubmitButton"
+        type="submit"
+        style="padding:10px 16px; cursor:pointer;"
+      >
+        Create Campaign
+      </button>
+
+      <button
+        id="campaignCancelButton"
+        type="button"
+        onclick="resetCampaignForm()"
+        style="padding:10px 16px; cursor:pointer; display:none;"
+      >
+        Cancel Edit
+      </button>
+
+      <button
+        type="button"
+        onclick="loadCampaigns()"
+        style="padding:10px 16px; cursor:pointer;"
+      >
+        Refresh
+      </button>
+
+    </div>
+
+  </form>
+
+  <div style="overflow-x:auto;">
+
+    <table>
+
+      <thead>
+        <tr>
+          <th>Campaign</th>
+          <th>Destination</th>
+          <th>Status</th>
+          <th>Created</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+
+      <tbody id="campaignManagerTable">
+      </tbody>
+
+    </table>
+
+  </div>
+
+</div>
+
+<div class="section">
+
   <h2>Campaigns</h2>
 
   <table>
@@ -588,6 +680,516 @@
     }
 
 
+    const CAMPAIGN_API_BASE =
+      "https://func-ai-money-lab-billing.azurewebsites.net/api";
+
+    function setCampaignManagerStatus(message, isError = false) {
+      const status =
+        document.getElementById("campaignManagerStatus");
+
+      status.textContent = message;
+      status.classList.toggle("error", isError);
+    }
+
+    function resetCampaignForm() {
+      document.getElementById("campaignId").value = "";
+      document.getElementById("campaignName").value = "";
+      document.getElementById("campaignDestination").value = "";
+
+      document.getElementById("campaignSubmitButton").textContent =
+        "Create Campaign";
+
+      document.getElementById("campaignCancelButton").style.display =
+        "none";
+    }
+
+    async function loadCampaigns() {
+      const customer = window.currentCustomer;
+
+      if (!customer) {
+        setCampaignManagerStatus(
+          "Customer session is not available.",
+          true
+        );
+        return;
+      }
+
+      try {
+        setCampaignManagerStatus("Loading campaigns...");
+
+        const response = await fetch(
+          CAMPAIGN_API_BASE +
+          "/campaigns?customer_id=" +
+          encodeURIComponent(customer.id)
+        );
+
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+          throw new Error(
+            result.error || "Unable to load campaigns."
+          );
+        }
+
+        renderCampaignManager(result.campaigns || []);
+
+        setCampaignManagerStatus(
+          `${(result.campaigns || []).length} campaign(s) loaded.`
+        );
+
+      } catch (error) {
+        console.error("Campaign load failed:", error);
+
+        setCampaignManagerStatus(
+          "Unable to load campaigns: " +
+          error.message,
+          true
+        );
+      }
+    }
+
+    function renderCampaignManager(campaigns) {
+      const table =
+        document.getElementById("campaignManagerTable");
+
+      table.innerHTML = "";
+
+      if (campaigns.length === 0) {
+        table.innerHTML = `
+          <tr>
+            <td colspan="5">
+              No campaigns yet. Create your first campaign above.
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      campaigns.forEach(campaign => {
+        const tr = document.createElement("tr");
+
+        const created =
+          campaign.created_at
+            ? new Date(campaign.created_at).toLocaleString()
+            : "";
+
+        const status =
+          String(campaign.status || "draft").toLowerCase();
+
+        const toggleStatus =
+          status === "active"
+            ? "paused"
+            : "active";
+
+        const toggleLabel =
+          status === "active"
+            ? "Pause"
+            : "Activate";
+
+        tr.innerHTML = `
+          <td>${escapeHtml(campaign.name || "")}</td>
+
+          <td style="max-width:260px; overflow-wrap:anywhere;">
+            ${escapeHtml(campaign.destination_url || "")}
+          </td>
+
+          <td>
+            <strong>${escapeHtml(status)}</strong>
+          </td>
+
+          <td>
+            ${escapeHtml(created)}
+          </td>
+
+          <td>
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+
+              <button
+                type="button"
+                onclick="editCampaign('${campaign.id}')"
+              >
+                Edit
+              </button>
+
+              <button
+                type="button"
+                onclick="toggleCampaignStatus('${campaign.id}', '${toggleStatus}')"
+              >
+                ${toggleLabel}
+              </button>
+
+              <button
+                type="button"
+                onclick="generateCampaignTrackingUrl('${campaign.id}')"
+              >
+                Tracking URL
+              </button>
+
+              <button
+                type="button"
+                onclick="deleteCampaign('${campaign.id}')"
+              >
+                Delete
+              </button>
+
+            </div>
+          </td>
+        `;
+
+        table.appendChild(tr);
+      });
+    }
+
+    async function createOrUpdateCampaign(event) {
+      event.preventDefault();
+
+      const customer = window.currentCustomer;
+
+      if (!customer) {
+        setCampaignManagerStatus(
+          "Customer session is not available.",
+          true
+        );
+        return;
+      }
+
+      const campaignId =
+        document.getElementById("campaignId").value.trim();
+
+      const name =
+        document.getElementById("campaignName").value.trim();
+
+      const destinationUrl =
+        document.getElementById("campaignDestination").value.trim();
+
+      if (!name || !destinationUrl) {
+        setCampaignManagerStatus(
+          "Campaign name and destination URL are required.",
+          true
+        );
+        return;
+      }
+
+      try {
+        const isEditing = Boolean(campaignId);
+
+        const url = isEditing
+          ? CAMPAIGN_API_BASE +
+            "/campaigns/" +
+            encodeURIComponent(campaignId)
+          : CAMPAIGN_API_BASE +
+            "/campaigns";
+
+        const body = isEditing
+          ? {
+              customer_id: customer.id,
+              name: name,
+              destination_url: destinationUrl
+            }
+          : {
+              customer_id: customer.id,
+              name: name,
+              destination_url: destinationUrl
+            };
+
+        const response = await fetch(url, {
+          method: isEditing ? "PUT" : "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(body)
+        });
+
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+          throw new Error(
+            result.error ||
+            (isEditing
+              ? "Unable to update campaign."
+              : "Unable to create campaign.")
+          );
+        }
+
+        resetCampaignForm();
+
+        await loadCampaigns();
+        await loadAnalytics();
+
+        setCampaignManagerStatus(
+          isEditing
+            ? "Campaign updated successfully."
+            : "Campaign created successfully."
+        );
+
+      } catch (error) {
+        console.error("Campaign save failed:", error);
+
+        setCampaignManagerStatus(
+          "Unable to save campaign: " +
+          error.message,
+          true
+        );
+      }
+    }
+
+    async function editCampaign(campaignId) {
+      const customer = window.currentCustomer;
+
+      if (!customer) {
+        setCampaignManagerStatus(
+          "Customer session is not available.",
+          true
+        );
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          CAMPAIGN_API_BASE +
+          "/campaigns/" +
+          encodeURIComponent(campaignId) +
+          "?customer_id=" +
+          encodeURIComponent(customer.id)
+        );
+
+        const result = await response.json();
+
+        if (!response.ok || !result.success || !result.campaign) {
+          throw new Error(
+            result.error || "Unable to load campaign."
+          );
+        }
+
+        const campaign = result.campaign;
+
+        document.getElementById("campaignId").value =
+          campaign.id;
+
+        document.getElementById("campaignName").value =
+          campaign.name || "";
+
+        document.getElementById("campaignDestination").value =
+          campaign.destination_url || "";
+
+        document.getElementById("campaignSubmitButton").textContent =
+          "Update Campaign";
+
+        document.getElementById("campaignCancelButton").style.display =
+          "inline-block";
+
+        document.getElementById("campaignName").focus();
+
+        setCampaignManagerStatus(
+          "Editing campaign: " +
+          campaign.name
+        );
+
+      } catch (error) {
+        console.error("Campaign edit failed:", error);
+
+        setCampaignManagerStatus(
+          "Unable to load campaign: " +
+          error.message,
+          true
+        );
+      }
+    }
+
+    async function toggleCampaignStatus(
+      campaignId,
+      newStatus
+    ) {
+      const customer = window.currentCustomer;
+
+      if (!customer) {
+        setCampaignManagerStatus(
+          "Customer session is not available.",
+          true
+        );
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          CAMPAIGN_API_BASE +
+          "/campaigns/" +
+          encodeURIComponent(campaignId),
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              customer_id: customer.id,
+              status: newStatus
+            })
+          }
+        );
+
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+          throw new Error(
+            result.error ||
+            "Unable to update campaign status."
+          );
+        }
+
+        await loadCampaigns();
+        await loadAnalytics();
+
+        setCampaignManagerStatus(
+          "Campaign status changed to " +
+          newStatus +
+          "."
+        );
+
+      } catch (error) {
+        console.error("Campaign status update failed:", error);
+
+        setCampaignManagerStatus(
+          "Unable to update campaign status: " +
+          error.message,
+          true
+        );
+      }
+    }
+
+    async function deleteCampaign(campaignId) {
+      const customer = window.currentCustomer;
+
+      if (!customer) {
+        setCampaignManagerStatus(
+          "Customer session is not available.",
+          true
+        );
+        return;
+      }
+
+      const confirmed = window.confirm(
+        "Delete this campaign? This action cannot be undone."
+      );
+
+      if (!confirmed) {
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          CAMPAIGN_API_BASE +
+          "/campaigns/" +
+          encodeURIComponent(campaignId) +
+          "?customer_id=" +
+          encodeURIComponent(customer.id),
+          {
+            method: "DELETE"
+          }
+        );
+
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+          throw new Error(
+            result.error ||
+            "Unable to delete campaign."
+          );
+        }
+
+        resetCampaignForm();
+
+        await loadCampaigns();
+        await loadAnalytics();
+
+        setCampaignManagerStatus(
+          "Campaign deleted successfully."
+        );
+
+      } catch (error) {
+        console.error("Campaign deletion failed:", error);
+
+        setCampaignManagerStatus(
+          "Unable to delete campaign: " +
+          error.message,
+          true
+        );
+      }
+    }
+
+    async function generateCampaignTrackingUrl(
+      campaignId
+    ) {
+      const customer = window.currentCustomer;
+
+      if (!customer) {
+        setCampaignManagerStatus(
+          "Customer session is not available.",
+          true
+        );
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          CAMPAIGN_API_BASE +
+          "/campaigns/" +
+          encodeURIComponent(campaignId) +
+          "/tracking-url?customer_id=" +
+          encodeURIComponent(customer.id)
+        );
+
+        const result = await response.json();
+
+        if (!response.ok || !result.success || !result.tracking_url) {
+          throw new Error(
+            result.error ||
+            "Unable to generate tracking URL."
+          );
+        }
+
+        const trackingUrl = result.tracking_url;
+
+        try {
+          await navigator.clipboard.writeText(trackingUrl);
+
+          setCampaignManagerStatus(
+            "Tracking URL copied to clipboard: " +
+            trackingUrl
+          );
+
+        } catch (clipboardError) {
+
+          window.prompt(
+            "Copy this tracking URL:",
+            trackingUrl
+          );
+
+          setCampaignManagerStatus(
+            "Tracking URL generated."
+          );
+        }
+
+      } catch (error) {
+        console.error(
+          "Tracking URL generation failed:",
+          error
+        );
+
+        setCampaignManagerStatus(
+          "Unable to generate tracking URL: " +
+          error.message,
+          true
+        );
+      }
+    }
+
+    document
+      .getElementById("campaignForm")
+      .addEventListener(
+        "submit",
+        createOrUpdateCampaign
+      );
+
     async function initializeCustomerAuth() {
 
       const accounts = msalInstance.getAllAccounts();
@@ -635,6 +1237,7 @@
     initializeCustomerAuth().then(isAuthenticated => {
 
       if (isAuthenticated) {
+        loadCampaigns();
         loadAnalytics();
       }
 
