@@ -913,7 +913,23 @@
 </div>
 
 <script>
+  let isSigningIn = false;
+
   async function signInCustomer() {
+    if (isSigningIn) {
+      return;
+    }
+
+    isSigningIn = true;
+
+    const signInButton =
+      document.getElementById("signInButton");
+
+    if (signInButton) {
+      signInButton.disabled = true;
+      signInButton.textContent = "Signing in...";
+    }
+
     try {
       const response = await msalInstance.loginPopup({
         scopes: [
@@ -936,6 +952,14 @@
       alert(
         "Sign-in failed. Please try again."
       );
+
+    } finally {
+      isSigningIn = false;
+
+      if (signInButton) {
+        signInButton.disabled = false;
+        signInButton.textContent = "Sign In / Sign Up";
+      }
     }
   }
 
