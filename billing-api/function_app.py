@@ -3,6 +3,7 @@ import os
 import uuid
 import azure.functions as func
 import psycopg
+import stripe
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
@@ -70,18 +71,9 @@ def billing_customer(req: func.HttpRequest) -> func.HttpResponse:
 
     email = str(body.get("email", "")).strip().lower()
     name = str(body.get("name", "")).strip() or None
-    plan = str(body.get("plan", "free")).strip().lower()
-
     if not email:
         return func.HttpResponse(
             json.dumps({"success": False, "error": "Email is required"}),
-            status_code=400,
-            mimetype="application/json",
-        )
-
-    if plan not in ALLOWED_PLANS:
-        return func.HttpResponse(
-            json.dumps({"success": False, "error": "Invalid plan"}),
             status_code=400,
             mimetype="application/json",
         )
@@ -92,14 +84,13 @@ def billing_customer(req: func.HttpRequest) -> func.HttpResponse:
                 cur.execute(
                     """
                     INSERT INTO customers (id, email, name, plan)
-                    VALUES (%s, %s, %s, %s)
+                    VALUES (%s, %s, %s, 'free')
                     ON CONFLICT (email)
                     DO UPDATE SET
-                        name = EXCLUDED.name,
-                        plan = EXCLUDED.plan
+                        name = EXCLUDED.name
                     RETURNING id, email, name, plan, subscription_status, created_at
                     """,
-                    (str(uuid.uuid4()), email, name, plan),
+                    (str(uuid.uuid4()), email, name),
                 )
 
                 row = cur.fetchone()
@@ -130,6 +121,311 @@ def billing_customer(req: func.HttpRequest) -> func.HttpResponse:
             status_code=500,
             mimetype="application/json",
             headers={"Access-Control-Allow-Origin": "*"},
+        )
+
+
+STRIPE_PLAN_PRICES = {
+    "starter": "STRIPE_PRICE_STARTER",
+    "growth": "STRIPE_PRICE_GROWTH",
+    "pro": "STRIPE_PRICE_PRO",
+}
+
+
+def stripe_price_for_plan(plan):
+    setting_name = STRIPE_PLAN_PRICES.get(plan)
+    if not setting_name:
+        return None
+    return os.environ.get(setting_name)
+
+
+def customer_response(row):
+    return {
+        "id": str(row[0]),
+        "email": row[1],
+        "name": row[2],
+        "plan": row[3],
+        "subscription_status": row[4],
+        "created_at": row[5].isoformat() if row[5] else None,
+        "features": PLAN_FEATURES.get(row[3], PLAN_FEATURES["free"]),
+    }
+
+
+@app.route(route="billing/checkout", methods=["POST", "OPTIONS"])
+def billing_checkout(req: func.HttpRequest) -> func.HttpResponse:
+    if req.method == "OPTIONS":
+        return func.HttpResponse(
+            "",
+            status_code=204,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "POST, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type",
+            },
+        )
+
+    try:
+        body = req.get_json()
+    except ValueError:
+        return json_response({"success": False, "error": "Invalid JSON"}, 400)
+
+    email = str(body.get("email", "")).strip().lower()
+    name = str(body.get("name", "")).strip() or None
+    customer_id = str(body.get("customer_id", "")).strip()
+    plan = str(body.get("plan", "")).strip().lower()
+
+    if not email or not customer_id:
+        return json_response({
+            "success": False,
+            "error": "Customer ID and email are required"
+        }, 400)
+
+    if plan not in {"starter", "growth", "pro"}:
+        return json_response({
+            "success": False,
+            "error": "Paid plan required"
+        }, 400)
+
+    price_id = stripe_price_for_plan(plan)
+
+    if not price_id:
+        return json_response({
+            "success": False,
+            "error": "Stripe price is not configured for this plan"
+        }, 500)
+
+    secret_key = os.environ.get("STRIPE_SECRET_KEY")
+
+    if not secret_key:
+        return json_response({
+            "success": False,
+            "error": "Stripe is not configured"
+        }, 500)
+
+    stripe.api_key = secret_key
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, email, name, plan, subscription_status, created_at,
+                           stripe_customer_id, stripe_subscription_id
+                    FROM customers
+                    WHERE email = %s
+                    """,
+                    (email,),
+                )
+                row = cur.fetchone()
+
+                if row:
+                    db_customer_id = str(row[0])
+
+                    cur.execute(
+                        """
+                        UPDATE customers
+                        SET name = COALESCE(%s, name)
+                        WHERE email = %s
+                        """,
+                        (name, email),
+                    )
+                else:
+                    db_customer_id = customer_id
+
+                    cur.execute(
+                        """
+                        INSERT INTO customers (id, email, name, plan)
+                        VALUES (%s, %s, %s, 'free')
+                        """,
+                        (db_customer_id, email, name),
+                    )
+
+                conn.commit()
+
+        stripe_customer_id = row[6] if row else None
+
+        if not stripe_customer_id:
+            stripe_customer = stripe.Customer.create(
+                email=email,
+                name=name,
+                metadata={
+                    "ai_money_lab_customer_id": db_customer_id
+                },
+            )
+            stripe_customer_id = stripe_customer.id
+
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        UPDATE customers
+                        SET stripe_customer_id = %s
+                        WHERE id = %s
+                        """,
+                        (stripe_customer_id, db_customer_id),
+                    )
+                conn.commit()
+
+        success_url = os.environ.get(
+            "STRIPE_SUCCESS_URL",
+            "https://aimoneyslab.com/dashboard.html?checkout=success"
+        )
+
+        cancel_url = os.environ.get(
+            "STRIPE_CANCEL_URL",
+            "https://aimoneyslab.com/dashboard.html?checkout=cancelled"
+        )
+
+        session = stripe.checkout.Session.create(
+            mode="subscription",
+            customer=stripe_customer_id,
+            line_items=[
+                {
+                    "price": price_id,
+                    "quantity": 1,
+                }
+            ],
+            success_url=success_url,
+            cancel_url=cancel_url,
+            metadata={
+                "customer_id": db_customer_id,
+                "plan": plan,
+            },
+            subscription_data={
+                "metadata": {
+                    "customer_id": db_customer_id,
+                    "plan": plan,
+                }
+            },
+        )
+
+        return json_response({
+            "success": True,
+            "checkout_url": session.url,
+            "session_id": session.id,
+        })
+
+    except Exception as exc:
+        print(f"STRIPE_CHECKOUT_ERROR: {type(exc).__name__}: {exc}")
+        return json_response({
+            "success": False,
+            "error": "Unable to create Stripe Checkout session"
+        }, 500)
+
+
+@app.route(route="stripe/webhook", methods=["POST"])
+def stripe_webhook(req: func.HttpRequest) -> func.HttpResponse:
+    payload = req.get_body()
+    signature = req.headers.get("Stripe-Signature")
+    webhook_secret = os.environ.get("STRIPE_WEBHOOK_SECRET")
+
+    if not webhook_secret:
+        return func.HttpResponse(
+            "Webhook secret not configured",
+            status_code=500,
+        )
+
+    try:
+        event = stripe.Webhook.construct_event(
+            payload,
+            signature,
+            webhook_secret,
+        )
+    except ValueError:
+        return func.HttpResponse("Invalid payload", status_code=400)
+    except stripe.error.SignatureVerificationError:
+        return func.HttpResponse("Invalid signature", status_code=400)
+
+    event_type = event["type"]
+    data = event["data"]["object"].to_dict()
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+
+                if event_type == "checkout.session.completed":
+                    customer_id = data.get("metadata", {}).get("customer_id")
+                    plan = data.get("metadata", {}).get("plan")
+                    stripe_customer_id = data.get("customer")
+                    stripe_subscription_id = data.get("subscription")
+
+                    # Ignore Checkout Sessions that are not created by
+                    # AI Money Lab subscription checkout.
+                    if not customer_id or plan not in ALLOWED_PLANS:
+                        return func.HttpResponse("ok", status_code=200)
+
+                    cur.execute(
+                            """
+                            UPDATE customers
+                            SET stripe_customer_id = %s,
+                                stripe_subscription_id = %s,
+                                stripe_price_id = %s,
+                                plan = %s,
+                                subscription_status = 'active'
+                            WHERE id = %s
+                            """,
+                            (
+                                stripe_customer_id,
+                                stripe_subscription_id,
+                                stripe_price_for_plan(plan),
+                                plan,
+                                customer_id,
+                            ),
+                        )
+
+                elif event_type in (
+                    "customer.subscription.updated",
+                    "customer.subscription.deleted",
+                ):
+                    stripe_customer_id = data.get("customer")
+                    stripe_subscription_id = data.get("id")
+                    subscription_status = data.get("status", "canceled")
+
+                    items = data.get("items", {}).get("data", [])
+                    price_id = None
+
+                    if items:
+                        price_id = items[0].get("price", {}).get("id")
+
+                    plan = "free"
+
+                    for candidate, env_name in STRIPE_PLAN_PRICES.items():
+                        if price_id and price_id == os.environ.get(env_name):
+                            plan = candidate
+                            break
+
+                    if event_type == "customer.subscription.deleted":
+                        plan = "free"
+                        subscription_status = "canceled"
+
+                    cur.execute(
+                        """
+                        UPDATE customers
+                        SET stripe_customer_id = %s,
+                            stripe_subscription_id = %s,
+                            stripe_price_id = %s,
+                            plan = %s,
+                            subscription_status = %s
+                        WHERE stripe_customer_id = %s
+                        """,
+                        (
+                            stripe_customer_id,
+                            stripe_subscription_id,
+                            price_id,
+                            plan,
+                            subscription_status,
+                            stripe_customer_id,
+                        ),
+                    )
+
+            conn.commit()
+
+        return func.HttpResponse("ok", status_code=200)
+
+    except Exception as exc:
+        print(f"STRIPE_WEBHOOK_ERROR: {type(exc).__name__}: {exc}")
+        return func.HttpResponse(
+            f"Webhook processing failed: {type(exc).__name__}: {exc}",
+            status_code=500,
         )
 
 

@@ -310,15 +310,21 @@
         return;
       }
 
+      if (plan.id === "free") {
+        alert("Free is the default plan. Paid plans require Stripe Checkout.");
+        return;
+      }
+
       try {
         const response = await fetch(
-          "https://func-ai-money-lab-billing.azurewebsites.net/api/billing/customer",
+          "https://func-ai-money-lab-billing.azurewebsites.net/api/billing/checkout",
           {
             method: "POST",
             headers: {
               "Content-Type": "application/json"
             },
             body: JSON.stringify({
+              customer_id: customer.id,
               email: customer.email,
               name: customer.name,
               plan: plan.id
@@ -328,24 +334,17 @@
 
         const result = await response.json();
 
-        if (!response.ok || !result.success) {
+        if (!response.ok || !result.success || !result.checkout_url) {
           throw new Error(
-            result.error || "Unable to update customer plan."
+            result.error || "Unable to start Stripe Checkout."
           );
         }
 
-        document.getElementById("customerPlan").textContent =
-          result.customer.plan.charAt(0).toUpperCase() +
-          result.customer.plan.slice(1);
+        window.location.href = result.checkout_url;
 
-        document.getElementById("subscriptionStatus").textContent =
-          "Subscription status: " +
-          result.customer.subscription_status;
-
-        renderPlanOptions();
       } catch (error) {
-        console.error("Plan selection failed:", error);
-        alert(error.message || "Unable to update customer plan.");
+        console.error("Stripe Checkout failed:", error);
+        alert(error.message || "Unable to start checkout.");
       }
     }
 
