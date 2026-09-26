@@ -1,2 +1,4 @@
 azure-functions
+azure-identity
+azure-servicebus
 psycopg[binary]

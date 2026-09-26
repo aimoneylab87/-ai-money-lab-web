@@ -3,12 +3,43 @@ import os
 
 import azure.functions as func
 import psycopg
+from azure.identity import DefaultAzureCredential
+from azure.servicebus import ServiceBusClient, ServiceBusMessage
 
 from entitlement import check_video_entitlement
 from video_service import create_video_job
 
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
+
+SERVICE_BUS_NAMESPACE = os.environ.get(
+    "SERVICE_BUS_NAMESPACE",
+    "sb-ai-money-lab.servicebus.windows.net",
+)
+SERVICE_BUS_QUEUE = os.environ.get(
+    "SERVICE_BUS_QUEUE",
+    "video-generation",
+)
+
+
+def enqueue_video_job(job_id: str):
+    credential = DefaultAzureCredential()
+
+    with ServiceBusClient(
+        fully_qualified_namespace=SERVICE_BUS_NAMESPACE,
+        credential=credential,
+    ) as client:
+        with client.get_queue_sender(
+            queue_name=SERVICE_BUS_QUEUE
+        ) as sender:
+            sender.send_messages(
+                ServiceBusMessage(
+                    json.dumps({"job_id": job_id}),
+                    content_type="application/json",
+                    subject="video-generation",
+                )
+            )
+
 
 
 def get_connection():
@@ -148,6 +179,19 @@ def create_video(req: func.HttpRequest) -> func.HttpResponse:
                 )
 
                 conn.commit()
+
+                try:
+                    enqueue_video_job(job["id"])
+                except Exception as queue_exc:
+                    print(
+                        f"VIDEO_QUEUE_ERROR: "
+                        f"{type(queue_exc).__name__}: {queue_exc}"
+                    )
+                    return json_response({
+                        "success": False,
+                        "error": "Video job could not be queued",
+                        "job": job,
+                    }, 503)
 
                 return json_response({
                     "success": True,
