@@ -1,0 +1,4 @@
+azure-servicebus
+azure-identity
+azure-storage-blob
+psycopg[binary]

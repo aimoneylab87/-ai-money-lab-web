@@ -1,3 +1,5 @@
 index.html.phase1-backup
 video-api/local.settings.json
 video-api/.venv/
+video-worker/.venv/
+video-worker/__pycache__/
