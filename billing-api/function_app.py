@@ -499,8 +499,15 @@ def serialize_campaign(row):
         "name": row[2],
         "destination_url": row[3],
         "status": row[4],
-        "created_at": row[5].isoformat(),
-        "updated_at": row[6].isoformat(),
+        "objective": row[5],
+        "budget": float(row[6]) if row[6] is not None else None,
+        "channel": row[7],
+        "audience": row[8],
+        "offer": row[9],
+        "start_date": row[10].isoformat() if row[10] else None,
+        "end_date": row[11].isoformat() if row[11] else None,
+        "created_at": row[12].isoformat(),
+        "updated_at": row[13].isoformat(),
     }
 
 
@@ -532,7 +539,8 @@ def campaigns(req: func.HttpRequest) -> func.HttpResponse:
                     cur.execute(
                         """
                         SELECT id, customer_id, name, destination_url,
-                               status, created_at, updated_at
+                               status, objective, budget, channel, audience, offer,
+                               start_date, end_date, created_at, updated_at
                         FROM campaigns
                         WHERE customer_id = %s
                         ORDER BY created_at DESC
@@ -559,6 +567,16 @@ def campaigns(req: func.HttpRequest) -> func.HttpResponse:
                 destination_url = str(
                     body.get("destination_url", "")
                 ).strip()
+                objective = str(body.get("objective", "")).strip() or None
+                channel = str(body.get("channel", "")).strip() or None
+                audience = str(body.get("audience", "")).strip() or None
+                offer = str(body.get("offer", "")).strip() or None
+
+                budget_value = body.get("budget")
+                budget = None if budget_value in (None, "") else float(budget_value)
+
+                start_date = str(body.get("start_date", "")).strip() or None
+                end_date = str(body.get("end_date", "")).strip() or None
 
                 if not name:
                     return json_response({
@@ -605,15 +623,31 @@ def campaigns(req: func.HttpRequest) -> func.HttpResponse:
                         id,
                         customer_id,
                         name,
-                        destination_url
+                        destination_url,
+                        objective,
+                        budget,
+                        channel,
+                        audience,
+                        offer,
+                        start_date,
+                        end_date
                     )
-                    VALUES (%s, %s, %s, %s)
+                    VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    )
                     RETURNING
                         id,
                         customer_id,
                         name,
                         destination_url,
                         status,
+                        objective,
+                        budget,
+                        channel,
+                        audience,
+                        offer,
+                        start_date,
+                        end_date,
                         created_at,
                         updated_at
                     """,
@@ -622,6 +656,13 @@ def campaigns(req: func.HttpRequest) -> func.HttpResponse:
                         customer_id,
                         name,
                         destination_url,
+                        objective,
+                        budget,
+                        channel,
+                        audience,
+                        offer,
+                        start_date,
+                        end_date,
                     ),
                 )
 
@@ -676,7 +717,8 @@ def campaign_detail(
                     cur.execute(
                         """
                         SELECT id, customer_id, name, destination_url,
-                               status, created_at, updated_at
+                               status, objective, budget, channel, audience, offer,
+                               start_date, end_date, created_at, updated_at
                         FROM campaigns
                         WHERE id = %s
                           AND customer_id = %s
@@ -736,6 +778,16 @@ def campaign_detail(
                 status = str(
                     body.get("status", "draft")
                 ).strip().lower()
+                objective = str(body.get("objective", "")).strip() or None
+                channel = str(body.get("channel", "")).strip() or None
+                audience = str(body.get("audience", "")).strip() or None
+                offer = str(body.get("offer", "")).strip() or None
+
+                budget_value = body.get("budget")
+                budget = None if budget_value in (None, "") else float(budget_value)
+
+                start_date = str(body.get("start_date", "")).strip() or None
+                end_date = str(body.get("end_date", "")).strip() or None
 
                 if not name:
                     return json_response({
@@ -769,6 +821,13 @@ def campaign_detail(
                         name = %s,
                         destination_url = %s,
                         status = %s,
+                        objective = %s,
+                        budget = %s,
+                        channel = %s,
+                        audience = %s,
+                        offer = %s,
+                        start_date = %s,
+                        end_date = %s,
                         updated_at = NOW()
                     WHERE id = %s
                       AND customer_id = %s
@@ -778,6 +837,13 @@ def campaign_detail(
                         name,
                         destination_url,
                         status,
+                        objective,
+                        budget,
+                        channel,
+                        audience,
+                        offer,
+                        start_date,
+                        end_date,
                         created_at,
                         updated_at
                     """,
@@ -785,6 +851,13 @@ def campaign_detail(
                         name,
                         destination_url,
                         status,
+                        objective,
+                        budget,
+                        channel,
+                        audience,
+                        offer,
+                        start_date,
+                        end_date,
                         campaign_id,
                         customer_id,
                     ),
