@@ -1,12 +1,30 @@
+import json
 import os
 
 import psycopg
+from azure.identity import DefaultAzureCredential
+from azure.servicebus import ServiceBusClient
 
 from provider_client import (
     VideoProviderError,
     get_video_provider,
 )
 from storage import VideoStorage
+
+
+SERVICE_BUS_NAMESPACE = os.environ.get(
+    "SERVICE_BUS_NAMESPACE",
+    "sb-ai-money-lab.servicebus.windows.net",
+)
+
+SERVICE_BUS_QUEUE = os.environ.get(
+    "SERVICE_BUS_QUEUE",
+    "video-generation",
+)
+
+MAX_DELIVERY_ATTEMPTS = int(
+    os.environ.get("MAX_DELIVERY_ATTEMPTS", "5")
+)
 
 
 def get_connection():
@@ -67,6 +85,19 @@ def mark_processing(cur, job_id: str):
     )
 
     return cur.rowcount == 1
+
+
+def mark_queued(cur, job_id: str, error_message: str):
+    cur.execute(
+        """
+        UPDATE video_jobs
+        SET
+            status = 'queued',
+            error_message = %s
+        WHERE id = %s
+        """,
+        (error_message[:4000], job_id),
+    )
 
 
 def mark_completed(
@@ -132,8 +163,7 @@ def process_video_job(job_id: str):
 
             if job["status"] != "queued":
                 raise ValueError(
-                    f"Video job {job_id} has status "
-                    f"{job['status']}"
+                    f"Video job {job_id} has status {job['status']}"
                 )
 
             if not mark_processing(cur, job_id):
@@ -174,13 +204,11 @@ def process_video_job(job_id: str):
         )
 
     except Exception as exc:
-        error_message = (
-            f"{type(exc).__name__}: {exc}"
-        )
+        error_message = f"{type(exc).__name__}: {exc}"
 
         with get_connection() as conn:
             with conn.cursor() as cur:
-                mark_failed(
+                mark_queued(
                     cur=cur,
                     job_id=job["id"],
                     error_message=error_message,
@@ -189,19 +217,116 @@ def process_video_job(job_id: str):
             conn.commit()
 
         print(
-            f"VIDEO_JOB_FAILED: "
+            f"VIDEO_JOB_RETRYABLE_FAILURE: "
             f"{job['id']} -> {error_message}"
         )
 
         raise
 
 
-if __name__ == "__main__":
-    job_id = os.environ.get("VIDEO_JOB_ID")
+def parse_job_id(message) -> str:
+    body = b"".join(message.body)
+    payload = json.loads(body.decode("utf-8"))
+
+    job_id = payload.get("job_id")
 
     if not job_id:
-        raise SystemExit(
-            "VIDEO_JOB_ID environment variable is required"
-        )
+        raise ValueError("Service Bus message does not contain job_id")
 
-    process_video_job(job_id)
+    return str(job_id)
+
+
+def mark_message_failed(job_id: str, error_message: str):
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            mark_failed(
+                cur=cur,
+                job_id=job_id,
+                error_message=error_message,
+            )
+
+        conn.commit()
+
+
+def run_worker():
+    credential = DefaultAzureCredential()
+
+    client = ServiceBusClient(
+        fully_qualified_namespace=SERVICE_BUS_NAMESPACE,
+        credential=credential,
+    )
+
+    print(
+        f"VIDEO_WORKER_STARTED: "
+        f"queue={SERVICE_BUS_QUEUE}"
+    )
+
+    with client:
+        with client.get_queue_receiver(
+            queue_name=SERVICE_BUS_QUEUE,
+            max_wait_time=30,
+            prefetch_count=1,
+        ) as receiver:
+
+            for message in receiver:
+                job_id = None
+
+                try:
+                    job_id = parse_job_id(message)
+
+                    print(
+                        f"VIDEO_MESSAGE_RECEIVED: "
+                        f"job_id={job_id} "
+                        f"delivery_count={message.delivery_count}"
+                    )
+
+                    process_video_job(job_id)
+
+                    receiver.complete_message(message)
+
+                    print(
+                        f"VIDEO_MESSAGE_COMPLETED: "
+                        f"job_id={job_id}"
+                    )
+
+                except Exception as exc:
+                    error_message = (
+                        f"{type(exc).__name__}: {exc}"
+                    )
+
+                    delivery_count = message.delivery_count
+
+                    if (
+                        job_id
+                        and delivery_count >= MAX_DELIVERY_ATTEMPTS
+                    ):
+                        mark_message_failed(
+                            job_id=job_id,
+                            error_message=(
+                                f"Maximum delivery attempts reached: "
+                                f"{error_message}"
+                            ),
+                        )
+
+                        receiver.dead_letter_message(
+                            message,
+                            reason="MaximumDeliveryAttempts",
+                            error_description=error_message[:4000],
+                        )
+
+                        print(
+                            f"VIDEO_MESSAGE_DEAD_LETTERED: "
+                            f"job_id={job_id}"
+                        )
+                    else:
+                        receiver.abandon_message(message)
+
+                        print(
+                            f"VIDEO_MESSAGE_RETRYING: "
+                            f"job_id={job_id} "
+                            f"delivery_count={delivery_count}"
+                        )
+
+
+if __name__ == "__main__":
+    run_worker()
