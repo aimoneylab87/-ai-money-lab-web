@@ -1662,6 +1662,292 @@ def analytics_dashboard(req: func.HttpRequest) -> func.HttpResponse:
         }, 500)
 
 
+
+@app.route(
+    route="optimization",
+    methods=["GET", "OPTIONS"],
+)
+def optimization(req: func.HttpRequest) -> func.HttpResponse:
+    if req.method == "OPTIONS":
+        return json_response({}, 204)
+
+    customer_id = str(
+        req.params.get("customer_id", "")
+    ).strip()
+
+    if not customer_id:
+        return json_response({
+            "success": False,
+            "error": "customer_id is required",
+        }, 400)
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id
+                    FROM customers
+                    WHERE id::text = %s
+                    """,
+                    (customer_id,),
+                )
+
+                if not cur.fetchone():
+                    return json_response({
+                        "success": False,
+                        "error": "Customer not found",
+                    }, 404)
+
+                cur.execute(
+                    """
+                    SELECT
+                        c.id,
+                        c.name,
+                        c.objective,
+                        c.budget,
+                        c.channel,
+                        c.audience,
+                        c.offer,
+                        COUNT(te.id) FILTER (
+                            WHERE te.event = 'click'
+                        ) AS clicks,
+                        COUNT(te.id) FILTER (
+                            WHERE te.event = 'conversion'
+                        ) AS conversions,
+                        COALESCE(
+                            SUM(te.revenue),
+                            0
+                        ) AS revenue,
+                        COALESCE(
+                            SUM(te.cost),
+                            0
+                        ) AS cost
+                    FROM campaigns c
+                    LEFT JOIN traffic_events te
+                        ON te.campaign = c.id::text
+                        AND te.customer_id = c.customer_id::text
+                    WHERE c.customer_id = %s
+                    GROUP BY
+                        c.id,
+                        c.name,
+                        c.objective,
+                        c.budget,
+                        c.channel,
+                        c.audience,
+                        c.offer
+                    ORDER BY revenue DESC, clicks DESC
+                    """,
+                    (customer_id,),
+                )
+
+                rows = cur.fetchall()
+
+        recommendations = []
+        opportunities = []
+        campaign_analysis = []
+
+        for row in rows:
+            (
+                campaign_id,
+                name,
+                objective,
+                budget,
+                channel,
+                audience,
+                offer,
+                clicks,
+                conversions,
+                revenue,
+                cost,
+            ) = row
+
+            clicks = int(clicks or 0)
+            conversions = int(conversions or 0)
+            revenue = float(revenue or 0)
+            cost = float(cost or 0)
+            budget = float(budget) if budget is not None else None
+
+            conversion_rate = (
+                (conversions / clicks) * 100
+                if clicks > 0
+                else 0
+            )
+
+            profit = revenue - cost
+
+            roi = (
+                (profit / cost) * 100
+                if cost > 0
+                else None
+            )
+
+            roas = (
+                revenue / cost
+                if cost > 0
+                else None
+            )
+
+            analysis = {
+                "campaign_id": str(campaign_id),
+                "name": name,
+                "objective": objective,
+                "channel": channel,
+                "audience": audience,
+                "offer": offer,
+                "clicks": clicks,
+                "conversions": conversions,
+                "conversion_rate": round(
+                    conversion_rate,
+                    2,
+                ),
+                "revenue": round(revenue, 2),
+                "cost": round(cost, 2),
+                "profit": round(profit, 2),
+                "roi": (
+                    round(roi, 2)
+                    if roi is not None
+                    else None
+                ),
+                "roas": (
+                    round(roas, 2)
+                    if roas is not None
+                    else None
+                ),
+            }
+
+            campaign_analysis.append(analysis)
+
+            if revenue > 0 and profit > 0 and roi is not None and roi >= 100:
+                recommendations.append({
+                    "type": "scale",
+                    "priority": "high",
+                    "campaign_id": str(campaign_id),
+                    "campaign": name,
+                    "reason": "Campaign is generating positive profit with ROI of at least 100%.",
+                    "action": "Consider increasing qualified traffic while monitoring conversion rate and profitability.",
+                })
+
+            elif clicks >= 10 and conversions == 0:
+                recommendations.append({
+                    "type": "conversion",
+                    "priority": "high",
+                    "campaign_id": str(campaign_id),
+                    "campaign": name,
+                    "reason": "Campaign has traffic but no recorded conversions.",
+                    "action": "Review the offer, landing experience, audience targeting, and conversion tracking.",
+                })
+
+            elif clicks >= 10 and conversion_rate < 2:
+                recommendations.append({
+                    "type": "optimize",
+                    "priority": "medium",
+                    "campaign_id": str(campaign_id),
+                    "campaign": name,
+                    "reason": "Campaign is receiving traffic but has a low recorded conversion rate.",
+                    "action": "Test the offer, creative, audience, or landing experience.",
+                })
+
+            if cost > 0 and profit < 0:
+                recommendations.append({
+                    "type": "protect_profit",
+                    "priority": "high",
+                    "campaign_id": str(campaign_id),
+                    "campaign": name,
+                    "reason": "Campaign cost is currently greater than attributed revenue.",
+                    "action": "Review spend, targeting, offer, and conversion performance before increasing traffic.",
+                })
+
+            if revenue == 0 and clicks == 0:
+                opportunities.append({
+                    "type": "data_collection",
+                    "campaign_id": str(campaign_id),
+                    "campaign": name,
+                    "reason": "No attributed traffic or revenue has been recorded yet.",
+                    "action": "Drive qualified traffic and collect enough performance data before making optimization decisions.",
+                })
+
+            if budget is not None and cost > budget:
+                recommendations.append({
+                    "type": "budget_alert",
+                    "priority": "high",
+                    "campaign_id": str(campaign_id),
+                    "campaign": name,
+                    "reason": "Recorded campaign cost is above the planned campaign budget.",
+                    "action": "Review campaign spending and update the budget or pause additional spend.",
+                })
+
+        if campaign_analysis:
+            profitable = [
+                item for item in campaign_analysis
+                if item["profit"] > 0
+            ]
+
+            if profitable:
+                best_campaign = max(
+                    profitable,
+                    key=lambda item: (
+                        item["roi"]
+                        if item["roi"] is not None
+                        else 0
+                    ),
+                )
+
+                opportunities.append({
+                    "type": "best_performer",
+                    "campaign_id": best_campaign["campaign_id"],
+                    "campaign": best_campaign["name"],
+                    "reason": "This campaign currently has the strongest positive ROI among campaigns with recorded profit.",
+                    "action": "Use its audience, offer, channel, and creative characteristics as candidates for controlled experiments.",
+                })
+
+        priority_order = {
+            "high": 0,
+            "medium": 1,
+            "low": 2,
+        }
+
+        recommendations.sort(
+            key=lambda item: priority_order.get(
+                item.get("priority"),
+                9,
+            )
+        )
+
+        next_best_action = None
+
+        if recommendations:
+            next_best_action = recommendations[0]
+        elif opportunities:
+            next_best_action = opportunities[0]
+
+        return json_response({
+            "success": True,
+            "customer_id": customer_id,
+            "campaign_count": len(campaign_analysis),
+            "campaigns": campaign_analysis,
+            "recommendations": recommendations,
+            "opportunities": opportunities,
+            "next_best_action": next_best_action,
+            "engine": {
+                "version": "1.0",
+                "mode": "recommendation",
+                "automatic_execution": False,
+            },
+        })
+
+    except Exception as exc:
+        print(
+            f"OPTIMIZATION_ERROR: "
+            f"{type(exc).__name__}: {exc}"
+        )
+
+        return json_response({
+            "success": False,
+            "error": "Optimization operation failed",
+        }, 500)
+
+
 def enqueue_video_job(job_id: str):
     credential = DefaultAzureCredential()
 
