@@ -220,3 +220,190 @@ def create_video(req: func.HttpRequest) -> func.HttpResponse:
             "success": False,
             "error": "Unable to create video job",
         }, 500)
+
+@app.route(route="videos", methods=["GET", "OPTIONS"])
+def list_videos(req: func.HttpRequest) -> func.HttpResponse:
+    if req.method == "OPTIONS":
+        return func.HttpResponse(
+            "",
+            status_code=204,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type",
+            },
+        )
+
+    customer_id = str(
+        req.params.get("customer_id", "")
+    ).strip()
+
+    if not customer_id:
+        return json_response({
+            "success": False,
+            "error": "customer_id is required",
+        }, 400)
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT
+                        id,
+                        customer_id,
+                        prompt,
+                        provider,
+                        status,
+                        duration_seconds,
+                        resolution,
+                        video_url,
+                        thumbnail_url,
+                        error_message,
+                        created_at,
+                        started_at,
+                        completed_at
+                    FROM video_jobs
+                    WHERE customer_id = %s
+                    ORDER BY created_at DESC
+                    LIMIT 50
+                    """,
+                    (customer_id,),
+                )
+
+                rows = cur.fetchall()
+
+        videos = []
+
+        for row in rows:
+            videos.append({
+                "id": str(row[0]),
+                "customer_id": str(row[1]),
+                "prompt": row[2],
+                "provider": row[3],
+                "status": row[4],
+                "duration_seconds": row[5],
+                "resolution": row[6],
+                "video_url": row[7],
+                "thumbnail_url": row[8],
+                "error_message": row[9],
+                "created_at": row[10].isoformat() if row[10] else None,
+                "started_at": row[11].isoformat() if row[11] else None,
+                "completed_at": row[12].isoformat() if row[12] else None,
+            })
+
+        return json_response({
+            "success": True,
+            "videos": videos,
+        })
+
+    except Exception as exc:
+        print(
+            f"VIDEO_LIST_ERROR: "
+            f"{type(exc).__name__}: {exc}"
+        )
+
+        return json_response({
+            "success": False,
+            "error": "Unable to load videos",
+        }, 500)
+
+
+@app.route(route="videos/{job_id}", methods=["GET", "OPTIONS"])
+def get_video(req: func.HttpRequest) -> func.HttpResponse:
+    if req.method == "OPTIONS":
+        return func.HttpResponse(
+            "",
+            status_code=204,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type",
+            },
+        )
+
+    job_id = str(
+        req.route_params.get("job_id", "")
+    ).strip()
+
+    customer_id = str(
+        req.params.get("customer_id", "")
+    ).strip()
+
+    if not job_id:
+        return json_response({
+            "success": False,
+            "error": "job_id is required",
+        }, 400)
+
+    if not customer_id:
+        return json_response({
+            "success": False,
+            "error": "customer_id is required",
+        }, 400)
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT
+                        id,
+                        customer_id,
+                        prompt,
+                        provider,
+                        status,
+                        duration_seconds,
+                        resolution,
+                        video_url,
+                        thumbnail_url,
+                        error_message,
+                        created_at,
+                        started_at,
+                        completed_at
+                    FROM video_jobs
+                    WHERE id = %s
+                      AND customer_id = %s
+                    """,
+                    (job_id, customer_id),
+                )
+
+                row = cur.fetchone()
+
+        if not row:
+            return json_response({
+                "success": False,
+                "error": "Video job not found",
+            }, 404)
+
+        video = {
+            "id": str(row[0]),
+            "customer_id": str(row[1]),
+            "prompt": row[2],
+            "provider": row[3],
+            "status": row[4],
+            "duration_seconds": row[5],
+            "resolution": row[6],
+            "video_url": row[7],
+            "thumbnail_url": row[8],
+            "error_message": row[9],
+            "created_at": row[10].isoformat() if row[10] else None,
+            "started_at": row[11].isoformat() if row[11] else None,
+            "completed_at": row[12].isoformat() if row[12] else None,
+        }
+
+        return json_response({
+            "success": True,
+            "video": video,
+        })
+
+    except Exception as exc:
+        print(
+            f"VIDEO_GET_ERROR: "
+            f"{type(exc).__name__}: {exc}"
+        )
+
+        return json_response({
+            "success": False,
+            "error": "Unable to load video job",
+        }, 500)

@@ -4,6 +4,7 @@
 <head>
   <script src="https://alcdn.msauth.net/browser/2.38.1/js/msal-browser.min.js"></script>
 
+  <script src="/frontend/video-generator.js"></script>
   <script>
     const msalConfig = {
       auth: {
@@ -307,6 +308,95 @@
 </div>
 
 <div class="section">
+
+  <section id="aiVideoGenerator" style="margin-top:32px;">
+    <h2>AI Video Generator</h2>
+
+    <div id="videoGeneratorStatus"
+         style="margin:12px 0;padding:10px;border-radius:8px;">
+      Ready to generate a video.
+    </div>
+
+    <form id="videoGeneratorForm">
+      <div style="margin-bottom:16px;">
+        <label for="videoPrompt">
+          Video Prompt
+        </label>
+        <textarea
+          id="videoPrompt"
+          rows="5"
+          maxlength="4000"
+          placeholder="Describe the video you want to create..."
+          style="width:100%;box-sizing:border-box;margin-top:6px;"
+          required></textarea>
+      </div>
+
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px;">
+        <div>
+          <label for="videoDuration">
+            Duration
+          </label>
+          <select id="videoDuration">
+            <option value="4">4 seconds</option>
+            <option value="8" selected>8 seconds</option>
+            <option value="12">12 seconds</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="videoResolution">
+            Resolution
+          </label>
+          <select id="videoResolution">
+            <option value="vertical" selected>
+              Vertical
+            </option>
+            <option value="landscape">
+              Landscape
+            </option>
+          </select>
+        </div>
+      </div>
+
+      <button
+        type="submit"
+        id="generateVideoButton">
+        Generate Video
+      </button>
+    </form>
+
+    <div
+      id="videoPreviewContainer"
+      style="margin-top:24px;">
+    </div>
+
+    <div style="margin-top:32px;">
+      <h3>Video History</h3>
+
+      <div style="overflow-x:auto;">
+        <table style="width:100%;">
+          <thead>
+            <tr>
+              <th>Prompt</th>
+              <th>Status</th>
+              <th>Duration</th>
+              <th>Resolution</th>
+              <th>Created</th>
+              <th>Video</th>
+            </tr>
+          </thead>
+
+          <tbody id="videoHistoryTable">
+            <tr>
+              <td colspan="6">
+                No videos generated yet.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
 
   <h2>Campaigns</h2>
 
@@ -1263,6 +1353,7 @@
       if (isAuthenticated) {
         loadCampaigns();
         loadAnalytics();
+        loadVideos();
       }
 
     });
