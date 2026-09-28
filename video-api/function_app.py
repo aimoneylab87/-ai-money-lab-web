@@ -87,7 +87,7 @@ def create_video(req: func.HttpRequest) -> func.HttpResponse:
 
     customer_id = str(body.get("customer_id", "")).strip()
     prompt = str(body.get("prompt", "")).strip()
-    provider = str(body.get("provider", "default")).strip() or "default"
+    provider = str(body.get("provider", "sora-2")).strip().lower() or "sora-2"
 
     try:
         duration_seconds = int(body.get("duration_seconds", 8))
@@ -119,16 +119,22 @@ def create_video(req: func.HttpRequest) -> func.HttpResponse:
             "error": "prompt is too long",
         }, 400)
 
-    if duration_seconds < 1 or duration_seconds > 60:
+    if duration_seconds not in {4, 8, 12}:
         return json_response({
             "success": False,
-            "error": "duration_seconds must be between 1 and 60",
+            "error": "duration_seconds must be 4, 8, or 12",
         }, 400)
 
-    if resolution not in {"vertical", "square", "landscape"}:
+    if resolution not in {"vertical", "landscape"}:
         return json_response({
             "success": False,
-            "error": "resolution must be vertical, square, or landscape",
+            "error": "resolution must be vertical or landscape",
+        }, 400)
+
+    if provider not in {"sora-2", "sora", "azure-sora"}:
+        return json_response({
+            "success": False,
+            "error": "provider must be sora-2, sora, or azure-sora",
         }, 400)
 
     try:
