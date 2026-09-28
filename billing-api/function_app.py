@@ -1304,6 +1304,63 @@ def conversion(req: func.HttpRequest) -> func.HttpResponse:
                         "error": "Campaign is not active",
                     }, 403)
 
+                attribution = None
+
+                if session_id:
+                    cur.execute(
+                        """
+                        SELECT
+                            source,
+                            medium,
+                            campaign,
+                            landing_page,
+                            destination
+                        FROM traffic_events
+                        WHERE event = 'click'
+                          AND campaign = %s
+                          AND session_id = %s
+                          AND customer_id = %s
+                        ORDER BY created_at DESC
+                        LIMIT 1
+                        """,
+                        (
+                            str(campaign[0]),
+                            session_id,
+                            str(campaign[1]),
+                        ),
+                    )
+                    attribution = cur.fetchone()
+
+                source = (
+                    attribution[0]
+                    if attribution and attribution[0]
+                    else "ai_money_lab"
+                )
+
+                medium = (
+                    attribution[1]
+                    if attribution and attribution[1]
+                    else "campaign"
+                )
+
+                attributed_campaign = (
+                    attribution[2]
+                    if attribution and attribution[2]
+                    else str(campaign[0])
+                )
+
+                landing_page = (
+                    attribution[3]
+                    if attribution and attribution[3]
+                    else "/api/conversions"
+                )
+
+                destination = (
+                    attribution[4]
+                    if attribution and attribution[4]
+                    else campaign[2]
+                )
+
                 cur.execute(
                     """
                     INSERT INTO traffic_events (
@@ -1327,13 +1384,13 @@ def conversion(req: func.HttpRequest) -> func.HttpResponse:
                     """,
                     (
                         "conversion",
-                        "ai_money_lab",
-                        "campaign",
-                        str(campaign[0]),
-                        "/api/conversions",
+                        source,
+                        medium,
+                        attributed_campaign,
+                        landing_page,
                         req.url,
                         session_id,
-                        campaign[2],
+                        destination,
                         revenue,
                         currency,
                         str(campaign[1]),
