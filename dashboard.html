@@ -20,6 +20,53 @@
 
     const msalInstance =
       new msal.PublicClientApplication(msalConfig);
+
+    const API_SCOPE =
+      "api://34a17cbc-44d7-465a-991c-42f8e33324ae/access_as_user";
+
+    async function getApiAccessToken() {
+      const account =
+        msalInstance.getActiveAccount() ||
+        msalInstance.getAllAccounts()[0];
+
+      if (!account) {
+        throw new Error("No signed-in Microsoft account.");
+      }
+
+      msalInstance.setActiveAccount(account);
+
+      try {
+        const response = await msalInstance.acquireTokenSilent({
+          account,
+          scopes: [API_SCOPE]
+        });
+
+        return response.accessToken;
+      } catch (error) {
+        const response = await msalInstance.acquireTokenPopup({
+          account,
+          scopes: [API_SCOPE]
+        });
+
+        return response.accessToken;
+      }
+    }
+
+    async function apiFetch(url, options = {}) {
+      const token = await getApiAccessToken();
+
+      const headers = new Headers(options.headers || {});
+      headers.set("Authorization", `Bearer ${token}`);
+
+      if (options.body && !headers.has("Content-Type")) {
+        headers.set("Content-Type", "application/json");
+      }
+
+      return fetch(url, {
+        ...options,
+        headers
+      });
+    }
   </script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -498,13 +545,10 @@
       }
 
       try {
-        const response = await fetch(
+        const response = await apiFetch(
           "https://func-ai-money-lab-billing.azurewebsites.net/api/billing/checkout",
           {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json"
-            },
             body: JSON.stringify({
               customer_id: customer.id,
               email: customer.email,
@@ -568,7 +612,7 @@
         const customerId = window.currentCustomer?.id || "";
 
         const response =
-          await fetch(
+          await apiFetch(
             "https://func-ai-money-lab-billing.azurewebsites.net/api/analytics-dashboard?customer_id=" +
             encodeURIComponent(customerId)
           );
@@ -807,7 +851,7 @@
       try {
         setCampaignManagerStatus("Loading campaigns...");
 
-        const response = await fetch(
+        const response = await apiFetch(
           CAMPAIGN_API_BASE +
           "/campaigns?customer_id=" +
           encodeURIComponent(customer.id)
@@ -982,7 +1026,7 @@
               destination_url: destinationUrl
             };
 
-        const response = await fetch(url, {
+        const response = await apiFetch(url, {
           method: isEditing ? "PUT" : "POST",
           headers: {
             "Content-Type": "application/json"
@@ -1035,7 +1079,7 @@
       }
 
       try {
-        const response = await fetch(
+        const response = await apiFetch(
           CAMPAIGN_API_BASE +
           "/campaigns/" +
           encodeURIComponent(campaignId) +
@@ -1101,7 +1145,7 @@
       }
 
       try {
-        const response = await fetch(
+        const response = await apiFetch(
           CAMPAIGN_API_BASE +
           "/campaigns/" +
           encodeURIComponent(campaignId),
@@ -1166,7 +1210,7 @@
       }
 
       try {
-        const response = await fetch(
+        const response = await apiFetch(
           CAMPAIGN_API_BASE +
           "/campaigns/" +
           encodeURIComponent(campaignId) +
@@ -1220,7 +1264,7 @@
       }
 
       try {
-        const response = await fetch(
+        const response = await apiFetch(
           CAMPAIGN_API_BASE +
           "/campaigns/" +
           encodeURIComponent(campaignId) +
@@ -1294,7 +1338,7 @@
 
       msalInstance.setActiveAccount(account);
 
-      const customerResponse = await fetch(
+      const customerResponse = await apiFetch(
         "https://func-ai-money-lab-billing.azurewebsites.net/api/billing/customer",
         {
           method: "POST",
