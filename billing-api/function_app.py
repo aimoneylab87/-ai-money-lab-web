@@ -47,6 +47,18 @@ def get_connection():
     )
 
 
+def parse_financial_value(value, field_name):
+    try:
+        amount = float(value if value not in (None, "") else 0)
+    except (TypeError, ValueError):
+        raise ValueError(f"{field_name} must be a number")
+
+    if amount < 0:
+        raise ValueError(f"{field_name} cannot be negative")
+
+    return amount
+
+
 @app.route(route="billing/customer", methods=["POST", "OPTIONS"])
 def billing_customer(req: func.HttpRequest) -> func.HttpResponse:
     if req.method == "OPTIONS":
@@ -907,6 +919,15 @@ def track(req: func.HttpRequest) -> func.HttpResponse:
     customer_id = str(body.get("customer_id", "")).strip() or None
 
     try:
+        revenue = parse_financial_value(body.get("revenue", 0), "revenue")
+        cost = parse_financial_value(body.get("cost", 0), "cost")
+    except ValueError as exc:
+        return json_response({
+            "success": False,
+            "error": str(exc),
+        }, 400)
+
+    try:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 if customer_id:
@@ -960,9 +981,9 @@ def track(req: func.HttpRequest) -> func.HttpResponse:
                         body.get("page_url"),
                         body.get("session_id"),
                         body.get("destination"),
-                        body.get("revenue", 0),
+                        revenue,
                         body.get("currency", "USD"),
-                        body.get("cost", 0),
+                        cost,
                         customer_id,
                     ),
                 )
@@ -1448,6 +1469,23 @@ def analytics_dashboard(req: func.HttpRequest) -> func.HttpResponse:
 
                 totals = cur.fetchone()
 
+                total_events = int(totals[0] or 0)
+                total_revenue = float(totals[1] or 0)
+                total_cost = float(totals[2] or 0)
+                total_profit = total_revenue - total_cost
+
+                total_roi = (
+                    (total_profit / total_cost) * 100
+                    if total_cost > 0
+                    else None
+                )
+
+                total_roas = (
+                    total_revenue / total_cost
+                    if total_cost > 0
+                    else None
+                )
+
                 cur.execute(
                     f"""
                     SELECT
@@ -1458,16 +1496,7 @@ def analytics_dashboard(req: func.HttpRequest) -> func.HttpResponse:
                         COUNT(*) FILTER (
                             WHERE event = 'conversion'
                         ) AS conversions,
-                        COALESCE(
-                            SUM(
-                                CASE
-                                    WHEN event = 'conversion'
-                                    THEN revenue
-                                    ELSE 0
-                                END
-                            ),
-                            0
-                        ) AS revenue,
+                        COALESCE(SUM(revenue), 0) AS revenue,
                         COALESCE(SUM(cost), 0) AS cost
                     FROM traffic_events
                     {scope}
@@ -1502,6 +1531,12 @@ def analytics_dashboard(req: func.HttpRequest) -> func.HttpResponse:
                         else None
                     )
 
+                    roas = (
+                        revenue / cost
+                        if cost > 0
+                        else None
+                    )
+
                     campaign_metrics.append({
                         "campaign": campaign,
                         "clicks": clicks,
@@ -1518,14 +1553,30 @@ def analytics_dashboard(req: func.HttpRequest) -> func.HttpResponse:
                             if roi is not None
                             else None
                         ),
+                        "roas": (
+                            round(roas, 2)
+                            if roas is not None
+                            else None
+                        ),
                     })
 
         return json_response({
             "success": True,
             "customer_id": customer_id or None,
-            "total_events": totals[0],
-            "total_revenue": float(totals[1]),
-            "total_cost": float(totals[2]),
+            "total_events": total_events,
+            "total_revenue": round(total_revenue, 2),
+            "total_cost": round(total_cost, 2),
+            "total_profit": round(total_profit, 2),
+            "total_roi": (
+                round(total_roi, 2)
+                if total_roi is not None
+                else None
+            ),
+            "total_roas": (
+                round(total_roas, 2)
+                if total_roas is not None
+                else None
+            ),
             "events": events,
             "sources": sources,
             "campaigns": campaigns,
