@@ -1,16 +1,70 @@
 import json
 import os
 import uuid
+from datetime import datetime, timedelta, timezone
 import azure.functions as func
 import psycopg
 import stripe
 from azure.identity import DefaultAzureCredential
+from azure.storage.blob import BlobServiceClient, BlobSasPermissions, generate_blob_sas
 from azure.servicebus import ServiceBusClient, ServiceBusMessage
 
 from entitlement import check_video_entitlement
 from video_service import create_video_job
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
+
+
+VIDEO_STORAGE_ACCOUNT = os.environ.get("VIDEO_STORAGE_ACCOUNT", "").strip()
+VIDEO_CONTAINER = os.environ.get("VIDEO_CONTAINER", "videos").strip()
+VIDEO_SAS_MINUTES = int(os.environ.get("VIDEO_SAS_MINUTES", "30"))
+
+
+def create_video_sas_url(video_url: str) -> str | None:
+    if not video_url or not VIDEO_STORAGE_ACCOUNT:
+        return video_url
+
+    try:
+        blob_name = video_url.rstrip("/").split("/")[-1]
+
+        credential = DefaultAzureCredential()
+
+        account_url = (
+            f"https://{VIDEO_STORAGE_ACCOUNT}.blob.core.windows.net"
+        )
+
+        client = BlobServiceClient(
+            account_url=account_url,
+            credential=credential,
+        )
+
+        now = datetime.now(timezone.utc)
+        account_key = client.get_user_delegation_key(
+            key_start_time=now - timedelta(minutes=1),
+            key_expiry_time=now + timedelta(minutes=VIDEO_SAS_MINUTES),
+        )
+        expiry = now + timedelta(minutes=VIDEO_SAS_MINUTES)
+
+        sas = generate_blob_sas(
+            account_name=VIDEO_STORAGE_ACCOUNT,
+            container_name=VIDEO_CONTAINER,
+            blob_name=blob_name,
+            user_delegation_key=account_key,
+            permission=BlobSasPermissions(read=True),
+            start=now - timedelta(minutes=1),
+            expiry=expiry,
+        )
+
+        return (
+            f"{account_url}/{VIDEO_CONTAINER}/{blob_name}?{sas}"
+        )
+
+    except Exception as exc:
+        print(
+            f"VIDEO_SAS_ERROR: "
+            f"{type(exc).__name__}: {exc}"
+        )
+        return None
 
 PLAN_FEATURES = {
     "free": {
@@ -2188,7 +2242,7 @@ def list_videos(req: func.HttpRequest) -> func.HttpResponse:
                 "status": row[4],
                 "duration_seconds": row[5],
                 "resolution": row[6],
-                "video_url": row[7],
+                "video_url": create_video_sas_url(row[7]) if row[7] else None,
                 "thumbnail_url": row[8],
                 "error_message": row[9],
                 "created_at": row[10].isoformat() if row[10] else None,
@@ -2288,7 +2342,7 @@ def get_video(req: func.HttpRequest) -> func.HttpResponse:
             "status": row[4],
             "duration_seconds": row[5],
             "resolution": row[6],
-            "video_url": row[7],
+            "video_url": create_video_sas_url(row[7]) if row[7] else None,
             "thumbnail_url": row[8],
             "error_message": row[9],
             "created_at": row[10].isoformat() if row[10] else None,

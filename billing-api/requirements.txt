@@ -3,3 +3,4 @@ psycopg[binary]
 stripe
 azure-identity
 azure-servicebus
+azure-storage-blob
