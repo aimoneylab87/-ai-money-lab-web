@@ -90,7 +90,7 @@ async function getVideoJob(jobId) {
         throw new Error("Customer account is not available.");
     }
 
-    const response = await fetch(
+    const response = await apiFetch(
         `${VIDEO_API_BASE}/videos/${encodeURIComponent(jobId)}?customer_id=${encodeURIComponent(customerId)}`
     );
 
@@ -181,7 +181,7 @@ async function generateVideo(event) {
             "info"
         );
 
-        const response = await fetch(`${VIDEO_API_BASE}/videos`, {
+        const response = await apiFetch(`${VIDEO_API_BASE}/videos`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"
@@ -240,7 +240,7 @@ async function loadVideos() {
     if (!customerId || !table) return;
 
     try {
-        const response = await fetch(
+        const response = await apiFetch(
             `${VIDEO_API_BASE}/videos?customer_id=${encodeURIComponent(customerId)}`
         );
 
