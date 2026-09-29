@@ -268,64 +268,76 @@ def run_worker():
             prefetch_count=1,
         ) as receiver:
 
-            for message in receiver:
-                job_id = None
+            messages = receiver.receive_messages(
+                max_message_count=1,
+                max_wait_time=30,
+            )
 
-                try:
-                    job_id = parse_job_id(message)
+            if not messages:
+                print(
+                    "VIDEO_NO_MESSAGE_RECEIVED: "
+                    f"queue={SERVICE_BUS_QUEUE}"
+                )
+                return
 
-                    print(
-                        f"VIDEO_MESSAGE_RECEIVED: "
-                        f"job_id={job_id} "
-                        f"delivery_count={message.delivery_count}"
+            message = messages[0]
+            job_id = None
+
+            try:
+                job_id = parse_job_id(message)
+
+                print(
+                    f"VIDEO_MESSAGE_RECEIVED: "
+                    f"job_id={job_id} "
+                    f"delivery_count={message.delivery_count}"
+                )
+
+                process_video_job(job_id)
+
+                receiver.complete_message(message)
+
+                print(
+                    f"VIDEO_MESSAGE_COMPLETED: "
+                    f"job_id={job_id}"
+                )
+
+            except Exception as exc:
+                error_message = (
+                    f"{type(exc).__name__}: {exc}"
+                )
+
+                delivery_count = message.delivery_count
+
+                if (
+                    job_id
+                    and delivery_count >= MAX_DELIVERY_ATTEMPTS
+                ):
+                    mark_message_failed(
+                        job_id=job_id,
+                        error_message=(
+                            f"Maximum delivery attempts reached: "
+                            f"{error_message}"
+                        ),
                     )
 
-                    process_video_job(job_id)
-
-                    receiver.complete_message(message)
+                    receiver.dead_letter_message(
+                        message,
+                        reason="MaximumDeliveryAttempts",
+                        error_description=error_message[:4000],
+                    )
 
                     print(
-                        f"VIDEO_MESSAGE_COMPLETED: "
+                        f"VIDEO_MESSAGE_DEAD_LETTERED: "
                         f"job_id={job_id}"
                     )
+                else:
+                    receiver.abandon_message(message)
 
-                except Exception as exc:
-                    error_message = (
-                        f"{type(exc).__name__}: {exc}"
+                    print(
+                        f"VIDEO_MESSAGE_RETRYING: "
+                        f"job_id={job_id} "
+                        f"delivery_count={delivery_count}"
                     )
-
-                    delivery_count = message.delivery_count
-
-                    if (
-                        job_id
-                        and delivery_count >= MAX_DELIVERY_ATTEMPTS
-                    ):
-                        mark_message_failed(
-                            job_id=job_id,
-                            error_message=(
-                                f"Maximum delivery attempts reached: "
-                                f"{error_message}"
-                            ),
-                        )
-
-                        receiver.dead_letter_message(
-                            message,
-                            reason="MaximumDeliveryAttempts",
-                            error_description=error_message[:4000],
-                        )
-
-                        print(
-                            f"VIDEO_MESSAGE_DEAD_LETTERED: "
-                            f"job_id={job_id}"
-                        )
-                    else:
-                        receiver.abandon_message(message)
-
-                        print(
-                            f"VIDEO_MESSAGE_RETRYING: "
-                            f"job_id={job_id} "
-                            f"delivery_count={delivery_count}"
-                        )
 
 
 if __name__ == "__main__":
