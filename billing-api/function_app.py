@@ -399,10 +399,7 @@ def stripe_webhook(req: func.HttpRequest) -> func.HttpResponse:
     webhook_secret = os.environ.get("STRIPE_WEBHOOK_SECRET")
 
     if not webhook_secret:
-        return func.HttpResponse(
-            "Webhook secret not configured",
-            status_code=500,
-        )
+        return func.HttpResponse("Webhook secret not configured", status_code=500)
 
     try:
         event = stripe.Webhook.construct_event(
@@ -428,28 +425,36 @@ def stripe_webhook(req: func.HttpRequest) -> func.HttpResponse:
                     stripe_customer_id = data.get("customer")
                     stripe_subscription_id = data.get("subscription")
 
-                    # Ignore Checkout Sessions that are not created by
-                    # AI Money Lab subscription checkout.
-                    if not customer_id or plan not in ALLOWED_PLANS:
+                    if (
+                        not customer_id
+                        or plan not in ALLOWED_PLANS
+                        or data.get("mode") != "subscription"
+                    ):
+                        conn.commit()
                         return func.HttpResponse("ok", status_code=200)
 
                     cur.execute(
-                            """
-                            UPDATE customers
-                            SET stripe_customer_id = %s,
-                                stripe_subscription_id = %s,
-                                stripe_price_id = %s,
-                                plan = %s,
-                                subscription_status = 'active'
-                            WHERE id = %s
-                            """,
-                            (
-                                stripe_customer_id,
-                                stripe_subscription_id,
-                                stripe_price_for_plan(plan),
-                                plan,
-                                customer_id,
-                            ),
+                        """
+                        UPDATE customers
+                        SET stripe_customer_id = %s,
+                            stripe_subscription_id = %s,
+                            stripe_price_id = %s,
+                            plan = %s,
+                            subscription_status = 'active'
+                        WHERE id = %s
+                        """,
+                        (
+                            stripe_customer_id,
+                            stripe_subscription_id,
+                            stripe_price_for_plan(plan),
+                            plan,
+                            customer_id,
+                        ),
+                    )
+
+                    if cur.rowcount != 1:
+                        raise RuntimeError(
+                            f"Customer update failed: {customer_id}"
                         )
 
                 elif event_type in (
@@ -461,15 +466,12 @@ def stripe_webhook(req: func.HttpRequest) -> func.HttpResponse:
                     subscription_status = data.get("status", "canceled")
 
                     items = data.get("items", {}).get("data", [])
-                    price_id = None
-
-                    if items:
-                        price_id = items[0].get("price", {}).get("id")
+                    price_id = items[0].get("price", {}).get("id") if items else None
 
                     plan = "free"
 
                     for candidate, env_name in STRIPE_PLAN_PRICES.items():
-                        if price_id and price_id == os.environ.get(env_name):
+                        if price_id == os.environ.get(env_name):
                             plan = candidate
                             break
 
@@ -497,17 +499,18 @@ def stripe_webhook(req: func.HttpRequest) -> func.HttpResponse:
                         ),
                     )
 
+                    if cur.rowcount > 1:
+                        raise RuntimeError(
+                            f"Multiple customers matched {stripe_customer_id}"
+                        )
+
             conn.commit()
 
         return func.HttpResponse("ok", status_code=200)
 
     except Exception as exc:
         print(f"STRIPE_WEBHOOK_ERROR: {type(exc).__name__}: {exc}")
-        return func.HttpResponse(
-            f"Webhook processing failed: {type(exc).__name__}: {exc}",
-            status_code=500,
-        )
-
+        return func.HttpResponse("Webhook processing failed", status_code=500)
 
 @app.route(route="billing/plan", methods=["GET", "OPTIONS"])
 def billing_plan(req: func.HttpRequest) -> func.HttpResponse:
