@@ -3,7 +3,7 @@ import os
 import uuid
 from datetime import datetime, timedelta, timezone
 import azure.functions as func
-from intelligence import calculate_performance, calculate_trend, detect_anomalies, calculate_forecast
+from intelligence import calculate_performance, calculate_trend, detect_anomalies, calculate_forecast, calculate_ltv_cac
 import psycopg
 import stripe
 from azure.identity import DefaultAzureCredential
@@ -2088,6 +2088,105 @@ def intelligence_performance(req: func.HttpRequest) -> func.HttpResponse:
             "error": "Intelligence operation failed",
         }, 500)
 
+
+
+@app.route(
+    route="intelligence-ltv-cac",
+    methods=["GET", "OPTIONS"],
+)
+def intelligence_ltv_cac(req: func.HttpRequest) -> func.HttpResponse:
+    if req.method == "OPTIONS":
+        return json_response({}, 204)
+
+    customer_id = str(
+        req.params.get("customer_id", "")
+    ).strip()
+
+    if not customer_id:
+        return json_response({
+            "success": False,
+            "error": "customer_id is required",
+        }, 400)
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT
+                        COALESCE(
+                            SUM(
+                                CASE
+                                    WHEN event = 'conversion'
+                                    THEN revenue
+                                    ELSE 0
+                                END
+                            ),
+                            0
+                        ) AS revenue,
+                        COUNT(*) FILTER (
+                            WHERE event = 'conversion'
+                        ) AS conversions,
+                        COUNT(
+                            DISTINCT CASE
+                                WHEN event = 'conversion'
+                                     AND session_id IS NOT NULL
+                                THEN session_id
+                            END
+                        ) AS unique_customers,
+                        COALESCE(
+                            SUM(cost),
+                            0
+                        ) AS acquisition_cost
+                    FROM traffic_events
+                    WHERE customer_id = %s
+                      AND created_at >= NOW() - INTERVAL '30 days'
+                    """,
+                    (customer_id,),
+                )
+
+                row = cur.fetchone()
+
+        revenue = float(row[0] or 0)
+        conversions = int(row[1] or 0)
+        unique_customers = int(row[2] or 0)
+        acquisition_cost = float(row[3] or 0)
+
+        customers = (
+            unique_customers
+            if unique_customers > 0
+            else conversions
+        )
+
+        result = calculate_ltv_cac(
+            revenue=revenue,
+            customers=customers,
+            acquisition_cost=acquisition_cost,
+            lifespan_periods=1,
+        )
+
+        return json_response({
+            "success": True,
+            "customer_id": customer_id,
+            "period": "last_30_days",
+            "metrics": result,
+            "engine": {
+                "version": "1.0",
+                "mode": "ltv_cac",
+                "lifespan_periods": 1,
+            },
+        })
+
+    except Exception as exc:
+        print(
+            f"INTELLIGENCE_LTV_CAC_ERROR: "
+            f"{type(exc).__name__}: {exc}"
+        )
+
+        return json_response({
+            "success": False,
+            "error": "Intelligence LTV/CAC operation failed",
+        }, 500)
 
 
 @app.route(

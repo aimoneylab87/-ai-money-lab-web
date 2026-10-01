@@ -175,3 +175,50 @@ def calculate_forecast(
     ) if clicks > 0 else 0
 
     return forecast
+
+
+def calculate_ltv_cac(
+    revenue: float,
+    customers: int,
+    acquisition_cost: float,
+    lifespan_periods: float = 1,
+) -> dict[str, Any]:
+    revenue = float(revenue or 0)
+    customers = int(customers or 0)
+    acquisition_cost = float(acquisition_cost or 0)
+    lifespan_periods = max(float(lifespan_periods or 1), 1)
+
+    revenue_per_customer = (
+        revenue / customers
+        if customers > 0
+        else 0
+    )
+
+    ltv = revenue_per_customer * lifespan_periods
+
+    cac = (
+        acquisition_cost / customers
+        if customers > 0
+        else 0
+    )
+
+    ltv_cac_ratio = (
+        ltv / cac
+        if cac > 0
+        else None
+    )
+
+    return {
+        "revenue": round(revenue, 2),
+        "customers": customers,
+        "acquisition_cost": round(acquisition_cost, 2),
+        "lifespan_periods": round(lifespan_periods, 2),
+        "revenue_per_customer": round(revenue_per_customer, 2),
+        "ltv": round(ltv, 2),
+        "cac": round(cac, 2),
+        "ltv_cac_ratio": (
+            round(ltv_cac_ratio, 2)
+            if ltv_cac_ratio is not None
+            else None
+        ),
+    }
