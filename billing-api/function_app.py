@@ -3,7 +3,7 @@ import os
 import uuid
 from datetime import datetime, timedelta, timezone
 import azure.functions as func
-from intelligence import calculate_performance, calculate_trend, detect_anomalies, calculate_forecast, calculate_ltv_cac
+from intelligence import calculate_performance, calculate_trend, detect_anomalies, calculate_forecast, calculate_ltv_cac, evaluate_decision_policy
 import psycopg
 import stripe
 from azure.identity import DefaultAzureCredential
@@ -1786,7 +1786,7 @@ def optimization(req: func.HttpRequest) -> func.HttpResponse:
                     FROM campaigns c
                     LEFT JOIN traffic_events te
                         ON te.campaign = c.id::text
-                        AND te.customer_id = c.customer_id::text
+                        AND te.customer_id = c.customer_id
                     WHERE c.customer_id = %s
                     GROUP BY
                         c.id,
@@ -1878,44 +1878,19 @@ def optimization(req: func.HttpRequest) -> func.HttpResponse:
 
             campaign_analysis.append(analysis)
 
-            if revenue > 0 and profit > 0 and roi is not None and roi >= 100:
-                recommendations.append({
-                    "type": "scale",
-                    "priority": "high",
-                    "campaign_id": str(campaign_id),
-                    "campaign": name,
-                    "reason": "Campaign is generating positive profit with ROI of at least 100%.",
-                    "action": "Consider increasing qualified traffic while monitoring conversion rate and profitability.",
-                })
+            policy_result = evaluate_decision_policy(
+                clicks=clicks,
+                conversions=conversions,
+                revenue=revenue,
+                cost=cost,
+                budget=budget,
+            )
 
-            elif clicks >= 10 and conversions == 0:
+            for decision in policy_result["decisions"]:
                 recommendations.append({
-                    "type": "conversion",
-                    "priority": "high",
+                    **decision,
                     "campaign_id": str(campaign_id),
                     "campaign": name,
-                    "reason": "Campaign has traffic but no recorded conversions.",
-                    "action": "Review the offer, landing experience, audience targeting, and conversion tracking.",
-                })
-
-            elif clicks >= 10 and conversion_rate < 2:
-                recommendations.append({
-                    "type": "optimize",
-                    "priority": "medium",
-                    "campaign_id": str(campaign_id),
-                    "campaign": name,
-                    "reason": "Campaign is receiving traffic but has a low recorded conversion rate.",
-                    "action": "Test the offer, creative, audience, or landing experience.",
-                })
-
-            if cost > 0 and profit < 0:
-                recommendations.append({
-                    "type": "protect_profit",
-                    "priority": "high",
-                    "campaign_id": str(campaign_id),
-                    "campaign": name,
-                    "reason": "Campaign cost is currently greater than attributed revenue.",
-                    "action": "Review spend, targeting, offer, and conversion performance before increasing traffic.",
                 })
 
             if revenue == 0 and clicks == 0:
@@ -1925,16 +1900,6 @@ def optimization(req: func.HttpRequest) -> func.HttpResponse:
                     "campaign": name,
                     "reason": "No attributed traffic or revenue has been recorded yet.",
                     "action": "Drive qualified traffic and collect enough performance data before making optimization decisions.",
-                })
-
-            if budget is not None and cost > budget:
-                recommendations.append({
-                    "type": "budget_alert",
-                    "priority": "high",
-                    "campaign_id": str(campaign_id),
-                    "campaign": name,
-                    "reason": "Recorded campaign cost is above the planned campaign budget.",
-                    "action": "Review campaign spending and update the budget or pause additional spend.",
                 })
 
         if campaign_analysis:

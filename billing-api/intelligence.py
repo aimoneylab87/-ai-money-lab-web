@@ -222,3 +222,114 @@ def calculate_ltv_cac(
             else None
         ),
     }
+
+
+DECISION_POLICY = {
+    "minimum_clicks_for_conversion_warning": 10,
+    "low_conversion_rate_percent": 2.0,
+    "minimum_roi_for_scale_percent": 100.0,
+    "minimum_profit_for_scale": 0.0,
+    "maximum_loss_for_protection": 0.0,
+    "budget_overrun_allowed": False,
+}
+
+
+def evaluate_decision_policy(
+    clicks: int,
+    conversions: int,
+    revenue: float,
+    cost: float,
+    budget: float | None = None,
+) -> dict[str, Any]:
+    clicks = int(clicks or 0)
+    conversions = int(conversions or 0)
+    revenue = float(revenue or 0)
+    cost = float(cost or 0)
+    budget = (
+        float(budget)
+        if budget is not None
+        else None
+    )
+
+    profit = revenue - cost
+
+    conversion_rate = (
+        (conversions / clicks) * 100
+        if clicks > 0
+        else 0
+    )
+
+    roi = (
+        (profit / cost) * 100
+        if cost > 0
+        else None
+    )
+
+    decisions: list[dict[str, Any]] = []
+
+    if (
+        revenue > 0
+        and profit > DECISION_POLICY["minimum_profit_for_scale"]
+        and roi is not None
+        and roi >= DECISION_POLICY["minimum_roi_for_scale_percent"]
+    ):
+        decisions.append({
+            "type": "scale",
+            "priority": "high",
+            "reason": "Positive profit and ROI meet the scale policy threshold.",
+            "action": "Consider increasing qualified traffic while monitoring profitability.",
+        })
+
+    if (
+        clicks >= DECISION_POLICY["minimum_clicks_for_conversion_warning"]
+        and conversions == 0
+    ):
+        decisions.append({
+            "type": "conversion",
+            "priority": "high",
+            "reason": "Traffic threshold reached without recorded conversions.",
+            "action": "Review the offer, landing experience, targeting, and conversion tracking.",
+        })
+
+    elif (
+        clicks >= DECISION_POLICY["minimum_clicks_for_conversion_warning"]
+        and conversion_rate < DECISION_POLICY["low_conversion_rate_percent"]
+    ):
+        decisions.append({
+            "type": "optimize",
+            "priority": "medium",
+            "reason": "Conversion rate is below the policy threshold.",
+            "action": "Test the offer, creative, audience, or landing experience.",
+        })
+
+    if (
+        cost > 0
+        and profit < DECISION_POLICY["maximum_loss_for_protection"]
+    ):
+        decisions.append({
+            "type": "protect_profit",
+            "priority": "high",
+            "reason": "Campaign is operating at a loss.",
+            "action": "Review spend and performance before increasing traffic.",
+        })
+
+    if (
+        DECISION_POLICY["budget_overrun_allowed"] is False
+        and budget is not None
+        and cost > budget
+    ):
+        decisions.append({
+            "type": "budget_alert",
+            "priority": "high",
+            "reason": "Campaign cost exceeds the planned budget.",
+            "action": "Review spending before additional spend is authorized.",
+        })
+
+    return {
+        "policy_version": "1.0",
+        "decisions": decisions,
+        "safety": {
+            "automatic_execution_allowed": False,
+            "budget_overrun_allowed": False,
+        },
+    }
