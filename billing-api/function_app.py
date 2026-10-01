@@ -3,7 +3,7 @@ import os
 import uuid
 from datetime import datetime, timedelta, timezone
 import azure.functions as func
-from intelligence import calculate_performance
+from intelligence import calculate_performance, calculate_trend
 import psycopg
 import stripe
 from azure.identity import DefaultAzureCredential
@@ -2086,6 +2086,139 @@ def intelligence_performance(req: func.HttpRequest) -> func.HttpResponse:
         return json_response({
             "success": False,
             "error": "Intelligence operation failed",
+        }, 500)
+
+
+@app.route(
+    route="intelligence-trend",
+    methods=["GET", "OPTIONS"],
+)
+def intelligence_trend(req: func.HttpRequest) -> func.HttpResponse:
+    if req.method == "OPTIONS":
+        return json_response({}, 204)
+
+    customer_id = str(
+        req.params.get("customer_id", "")
+    ).strip()
+
+    if not customer_id:
+        return json_response({
+            "success": False,
+            "error": "customer_id is required",
+        }, 400)
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT
+                        COUNT(*) FILTER (
+                            WHERE event = 'click'
+                        ) AS clicks,
+                        COUNT(*) FILTER (
+                            WHERE event = 'conversion'
+                        ) AS conversions,
+                        COALESCE(
+                            SUM(
+                                CASE
+                                    WHEN event = 'conversion'
+                                    THEN revenue
+                                    ELSE 0
+                                END
+                            ),
+                            0
+                        ) AS revenue,
+                        COALESCE(
+                            SUM(cost),
+                            0
+                        ) AS cost
+                    FROM traffic_events
+                    WHERE customer_id = %s
+                      AND created_at >= NOW() - INTERVAL '7 days'
+                    """,
+                    (customer_id,),
+                )
+
+                current_row = cur.fetchone()
+
+                cur.execute(
+                    """
+                    SELECT
+                        COUNT(*) FILTER (
+                            WHERE event = 'click'
+                        ) AS clicks,
+                        COUNT(*) FILTER (
+                            WHERE event = 'conversion'
+                        ) AS conversions,
+                        COALESCE(
+                            SUM(
+                                CASE
+                                    WHEN event = 'conversion'
+                                    THEN revenue
+                                    ELSE 0
+                                END
+                            ),
+                            0
+                        ) AS revenue,
+                        COALESCE(
+                            SUM(cost),
+                            0
+                        ) AS cost
+                    FROM traffic_events
+                    WHERE customer_id = %s
+                      AND created_at >= NOW() - INTERVAL '14 days'
+                      AND created_at < NOW() - INTERVAL '7 days'
+                    """,
+                    (customer_id,),
+                )
+
+                previous_row = cur.fetchone()
+
+        current = calculate_performance(
+            clicks=current_row[0],
+            conversions=current_row[1],
+            revenue=current_row[2],
+            cost=current_row[3],
+        )
+
+        previous = calculate_performance(
+            clicks=previous_row[0],
+            conversions=previous_row[1],
+            revenue=previous_row[2],
+            cost=previous_row[3],
+        )
+
+        trend = calculate_trend(
+            current=current,
+            previous=previous,
+        )
+
+        return json_response({
+            "success": True,
+            "customer_id": customer_id,
+            "periods": {
+                "current": "last_7_days",
+                "previous": "7_to_14_days_ago",
+            },
+            "current": current,
+            "previous": previous,
+            "trend": trend,
+            "engine": {
+                "version": "1.0",
+                "mode": "trend",
+            },
+        })
+
+    except Exception as exc:
+        print(
+            f"INTELLIGENCE_TREND_ERROR: "
+            f"{type(exc).__name__}: {exc}"
+        )
+
+        return json_response({
+            "success": False,
+            "error": "Intelligence trend operation failed",
         }, 500)
 
 

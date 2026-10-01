@@ -44,3 +44,43 @@ def calculate_performance(
         "roi": round(roi, 2) if roi is not None else None,
         "roas": round(roas, 2) if roas is not None else None,
     }
+
+
+def calculate_trend(
+    current: dict[str, Any],
+    previous: dict[str, Any],
+) -> dict[str, Any]:
+    metrics = (
+        "clicks",
+        "conversions",
+        "conversion_rate",
+        "revenue",
+        "cost",
+        "profit",
+    )
+
+    trend: dict[str, Any] = {}
+
+    for metric in metrics:
+        current_value = float(current.get(metric) or 0)
+        previous_value = float(previous.get(metric) or 0)
+
+        change = current_value - previous_value
+
+        if previous_value != 0:
+            change_percent = (
+                (change / abs(previous_value)) * 100
+            )
+        elif current_value != 0:
+            change_percent = 100.0
+        else:
+            change_percent = 0.0
+
+        trend[metric] = {
+            "current": round(current_value, 2),
+            "previous": round(previous_value, 2),
+            "change": round(change, 2),
+            "change_percent": round(change_percent, 2),
+        }
+
+    return trend
