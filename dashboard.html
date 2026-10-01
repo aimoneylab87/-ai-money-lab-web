@@ -1012,7 +1012,8 @@
             "/campaigns/" +
             encodeURIComponent(campaignId)
           : CAMPAIGN_API_BASE +
-            "/campaigns";
+            "/campaigns?customer_id=" +
+            encodeURIComponent(customer.id);
 
         const body = isEditing
           ? {
