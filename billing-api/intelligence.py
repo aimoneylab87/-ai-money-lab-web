@@ -84,3 +84,58 @@ def calculate_trend(
         }
 
     return trend
+
+def detect_anomalies(
+    current: dict[str, Any],
+    previous: dict[str, Any],
+    threshold_percent: float = 50.0,
+) -> list[dict[str, Any]]:
+    anomalies: list[dict[str, Any]] = []
+
+    metrics = (
+        "clicks",
+        "conversions",
+        "conversion_rate",
+        "revenue",
+        "cost",
+        "profit",
+    )
+
+    for metric in metrics:
+        current_value = float(current.get(metric) or 0)
+        previous_value = float(previous.get(metric) or 0)
+
+        if previous_value == 0:
+            if current_value == 0:
+                continue
+
+            anomalies.append({
+                "metric": metric,
+                "current": round(current_value, 2),
+                "previous": round(previous_value, 2),
+                "change_percent": 100.0,
+                "direction": "increase",
+                "reason": "new_activity",
+            })
+            continue
+
+        change_percent = (
+            (current_value - previous_value)
+            / abs(previous_value)
+        ) * 100
+
+        if abs(change_percent) >= threshold_percent:
+            anomalies.append({
+                "metric": metric,
+                "current": round(current_value, 2),
+                "previous": round(previous_value, 2),
+                "change_percent": round(change_percent, 2),
+                "direction": (
+                    "increase"
+                    if change_percent > 0
+                    else "decrease"
+                ),
+                "reason": "threshold_exceeded",
+            })
+
+    return anomalies
