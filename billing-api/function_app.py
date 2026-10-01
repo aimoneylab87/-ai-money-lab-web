@@ -3,7 +3,7 @@ import os
 import uuid
 from datetime import datetime, timedelta, timezone
 import azure.functions as func
-from intelligence import calculate_performance, calculate_trend, detect_anomalies
+from intelligence import calculate_performance, calculate_trend, detect_anomalies, calculate_forecast
 import psycopg
 import stripe
 from azure.identity import DefaultAzureCredential
@@ -2086,6 +2086,97 @@ def intelligence_performance(req: func.HttpRequest) -> func.HttpResponse:
         return json_response({
             "success": False,
             "error": "Intelligence operation failed",
+        }, 500)
+
+
+
+@app.route(
+    route="intelligence-forecast",
+    methods=["GET", "OPTIONS"],
+)
+def intelligence_forecast(req: func.HttpRequest) -> func.HttpResponse:
+    if req.method == "OPTIONS":
+        return json_response({}, 204)
+
+    customer_id = str(
+        req.params.get("customer_id", "")
+    ).strip()
+
+    if not customer_id:
+        return json_response({
+            "success": False,
+            "error": "customer_id is required",
+        }, 400)
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT
+                        COUNT(*) FILTER (
+                            WHERE event = 'click'
+                        ) AS clicks,
+                        COUNT(*) FILTER (
+                            WHERE event = 'conversion'
+                        ) AS conversions,
+                        COALESCE(
+                            SUM(
+                                CASE
+                                    WHEN event = 'conversion'
+                                    THEN revenue
+                                    ELSE 0
+                                END
+                            ),
+                            0
+                        ) AS revenue,
+                        COALESCE(
+                            SUM(cost),
+                            0
+                        ) AS cost
+                    FROM traffic_events
+                    WHERE customer_id = %s
+                      AND created_at >= NOW() - INTERVAL '7 days'
+                    """,
+                    (customer_id,),
+                )
+
+                row = cur.fetchone()
+
+        current = calculate_performance(
+            clicks=row[0],
+            conversions=row[1],
+            revenue=row[2],
+            cost=row[3],
+        )
+
+        forecast = calculate_forecast(
+            current=current,
+            forecast_days=7,
+        )
+
+        return json_response({
+            "success": True,
+            "customer_id": customer_id,
+            "period": "next_7_days",
+            "baseline": current,
+            "forecast": forecast,
+            "engine": {
+                "version": "1.0",
+                "mode": "forecast",
+                "forecast_days": 7,
+            },
+        })
+
+    except Exception as exc:
+        print(
+            f"INTELLIGENCE_FORECAST_ERROR: "
+            f"{type(exc).__name__}: {exc}"
+        )
+
+        return json_response({
+            "success": False,
+            "error": "Intelligence forecast operation failed",
         }, 500)
 
 

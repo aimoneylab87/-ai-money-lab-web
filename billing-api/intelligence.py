@@ -139,3 +139,39 @@ def detect_anomalies(
             })
 
     return anomalies
+
+
+def calculate_forecast(
+    current: dict[str, Any],
+    forecast_days: int = 7,
+) -> dict[str, Any]:
+    forecast_days = max(int(forecast_days or 7), 1)
+
+    metrics = (
+        "clicks",
+        "conversions",
+        "revenue",
+        "cost",
+        "profit",
+    )
+
+    forecast: dict[str, Any] = {}
+
+    for metric in metrics:
+        current_value = float(current.get(metric) or 0)
+
+        projected_value = (
+            current_value / 7
+        ) * forecast_days
+
+        forecast[metric] = round(projected_value, 2)
+
+    clicks = forecast["clicks"]
+    conversions = forecast["conversions"]
+
+    forecast["conversion_rate"] = round(
+        (conversions / clicks) * 100,
+        2,
+    ) if clicks > 0 else 0
+
+    return forecast
