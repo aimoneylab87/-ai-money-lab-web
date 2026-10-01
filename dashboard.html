@@ -1371,6 +1371,13 @@
         window.currentCustomer.name ||
         window.currentCustomer.email;
 
+      document.getElementById("customerPlan").textContent =
+        window.currentCustomer.plan || "free";
+
+      document.getElementById("subscriptionStatus").textContent =
+        "Subscription status: " +
+        (window.currentCustomer.subscription_status || "inactive");
+
       renderPlanOptions();
 
       return true;
