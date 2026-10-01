@@ -646,8 +646,8 @@
           events.find(row => row.event === "conversion")?.count || 0;
 
         const conversionRate =
-          pageViews > 0
-            ? (conversions / pageViews) * 100
+          clicks > 0
+            ? (conversions / clicks) * 100
             : 0;
 
         document.getElementById("pageViews").textContent =
@@ -779,9 +779,9 @@
 
         let conversionRate = 0;
 
-        if (pageViews > 0) {
+        if (clicks > 0) {
           conversionRate =
-            (conversions / pageViews) * 100;
+            (conversions / clicks) * 100;
         }
 
         const tr =
