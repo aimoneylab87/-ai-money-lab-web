@@ -150,7 +150,9 @@ def billing_customer(req: func.HttpRequest) -> func.HttpResponse:
         )
 
     email = str(body.get("email", "")).strip().lower()
-    name = str(body.get("name", "")).strip() or None
+    name = str(body.get("name", "")).strip()
+    if not name:
+        name = email.split("@")[0]
     if not email:
         return func.HttpResponse(
             json.dumps({"success": False, "error": "Email is required"}),
