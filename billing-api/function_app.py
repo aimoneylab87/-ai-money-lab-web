@@ -128,6 +128,202 @@ def parse_financial_value(value, field_name):
     return amount
 
 
+AUTOMATION_ACTIONS = {
+    "pause",
+    "launch",
+}
+
+
+def execute_automation_action(
+    customer_id: str,
+    campaign_id: str | None,
+    decision_type: str,
+    action: str,
+    reason: str | None = None,
+    metadata: dict | None = None,
+) -> dict:
+    action = str(action or "").strip().lower()
+
+    if action not in AUTOMATION_ACTIONS:
+        raise ValueError("Unsupported automation action")
+
+    execution_id = str(uuid.uuid4())
+    metadata = metadata or {}
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO automation_executions (
+                    id,
+                    customer_id,
+                    campaign_id,
+                    decision_type,
+                    action,
+                    status,
+                    reason,
+                    metadata
+                )
+                VALUES (%s, %s, %s, %s, %s, 'pending', %s, %s)
+                """,
+                (
+                    execution_id,
+                    customer_id,
+                    campaign_id,
+                    decision_type,
+                    action,
+                    reason,
+                    json.dumps(metadata),
+                ),
+            )
+
+            if action == "pause":
+                if not campaign_id:
+                    raise ValueError(
+                        "campaign_id is required for pause"
+                    )
+
+                cur.execute(
+                    """
+                    UPDATE campaigns
+                    SET status = 'paused',
+                        updated_at = NOW()
+                    WHERE id = %s
+                      AND customer_id = %s
+                    RETURNING id
+                    """,
+                    (campaign_id, customer_id),
+                )
+
+                if not cur.fetchone():
+                    raise ValueError("Campaign not found")
+
+            elif action == "launch":
+                if not campaign_id:
+                    raise ValueError(
+                        "campaign_id is required for launch"
+                    )
+
+                cur.execute(
+                    """
+                    UPDATE campaigns
+                    SET status = 'active',
+                        updated_at = NOW()
+                    WHERE id = %s
+                      AND customer_id = %s
+                    RETURNING id
+                    """,
+                    (campaign_id, customer_id),
+                )
+
+                if not cur.fetchone():
+                    raise ValueError("Campaign not found")
+
+            cur.execute(
+                """
+                UPDATE automation_executions
+                SET status = 'executed',
+                    executed_at = NOW()
+                WHERE id = %s
+                """,
+                (execution_id,),
+            )
+
+    return {
+        "execution_id": execution_id,
+        "action": action,
+        "status": "executed",
+    }
+
+
+@app.route(
+    route="automation/execute",
+    methods=["POST", "OPTIONS"],
+)
+def automation_execute(req: func.HttpRequest) -> func.HttpResponse:
+    if req.method == "OPTIONS":
+        return json_response({}, 204)
+
+    try:
+        body = req.get_json()
+    except ValueError:
+        return json_response({
+            "success": False,
+            "error": "Invalid JSON",
+        }, 400)
+
+    customer_id = str(body.get("customer_id", "")).strip()
+    campaign_id = str(body.get("campaign_id", "")).strip() or None
+    decision_type = str(body.get("decision_type", "")).strip().lower()
+    action = str(body.get("action", "")).strip().lower()
+    reason = str(body.get("reason", "")).strip() or None
+    metadata = body.get("metadata") or {}
+
+    if not customer_id:
+        return json_response({
+            "success": False,
+            "error": "customer_id is required",
+        }, 400)
+
+    if not decision_type:
+        return json_response({
+            "success": False,
+            "error": "decision_type is required",
+        }, 400)
+
+    if action not in AUTOMATION_ACTIONS:
+        return json_response({
+            "success": False,
+            "error": "Unsupported automation action",
+        }, 400)
+
+    if not isinstance(metadata, dict):
+        return json_response({
+            "success": False,
+            "error": "metadata must be an object",
+        }, 400)
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id FROM customers WHERE id = %s",
+                    (customer_id,),
+                )
+
+                if not cur.fetchone():
+                    return json_response({
+                        "success": False,
+                        "error": "Customer not found",
+                    }, 404)
+
+        result = execute_automation_action(
+            customer_id=customer_id,
+            campaign_id=campaign_id,
+            decision_type=decision_type,
+            action=action,
+            reason=reason,
+            metadata=metadata,
+        )
+
+        return json_response({
+            "success": True,
+            "execution": result,
+        }, 200)
+
+    except ValueError as exc:
+        return json_response({
+            "success": False,
+            "error": str(exc),
+        }, 400)
+
+    except Exception:
+        return json_response({
+            "success": False,
+            "error": "Automation execution failed",
+        }, 500)
+
+
 @app.route(route="billing/customer", methods=["POST", "OPTIONS"])
 def billing_customer(req: func.HttpRequest) -> func.HttpResponse:
     if req.method == "OPTIONS":
