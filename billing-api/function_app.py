@@ -793,6 +793,448 @@ def serialize_campaign(row):
     }
 
 
+
+def content_customer(customer_id, cur):
+    cur.execute(
+        """
+        SELECT id, email, name, plan
+        FROM customers
+        WHERE id = %s
+        """,
+        (customer_id,),
+    )
+    return cur.fetchone()
+
+
+def serialize_content(row):
+    return {
+        "id": str(row[0]),
+        "customer_id": str(row[1]),
+        "title": row[2],
+        "body": row[3],
+        "content_type": row[4],
+        "status": row[5],
+        "created_at": row[6].isoformat() if row[6] else None,
+        "updated_at": row[7].isoformat() if row[7] else None,
+    }
+
+
+@app.route(route="content", methods=["GET", "POST", "OPTIONS"])
+def content(req: func.HttpRequest) -> func.HttpResponse:
+    if req.method == "OPTIONS":
+        return json_response({}, 204)
+
+    customer_id = str(
+        req.params.get("customer_id", "")
+    ).strip()
+
+    if not customer_id:
+        return json_response({
+            "success": False,
+            "error": "customer_id is required",
+        }, 400)
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                customer = content_customer(customer_id, cur)
+
+                if not customer:
+                    return json_response({
+                        "success": False,
+                        "error": "Customer not found",
+                    }, 404)
+
+                if req.method == "GET":
+                    cur.execute(
+                        """
+                        SELECT
+                            id,
+                            customer_id,
+                            title,
+                            body,
+                            content_type,
+                            status,
+                            created_at,
+                            updated_at
+                        FROM content_items
+                        WHERE customer_id = %s
+                        ORDER BY created_at DESC
+                        """,
+                        (customer_id,),
+                    )
+
+                    rows = cur.fetchall()
+
+                    return json_response({
+                        "success": True,
+                        "content": [
+                            serialize_content(row)
+                            for row in rows
+                        ],
+                    })
+
+                try:
+                    body = req.get_json()
+                except ValueError:
+                    return json_response({
+                        "success": False,
+                        "error": "Invalid JSON",
+                    }, 400)
+
+                title = str(
+                    body.get("title", "")
+                ).strip()
+
+                content_body = str(
+                    body.get("body", "")
+                ).strip()
+
+                content_type = str(
+                    body.get("content_type", "text")
+                ).strip().lower() or "text"
+
+                status = str(
+                    body.get("status", "draft")
+                ).strip().lower() or "draft"
+
+                if not title:
+                    return json_response({
+                        "success": False,
+                        "error": "Content title is required",
+                    }, 400)
+
+                if not content_body:
+                    return json_response({
+                        "success": False,
+                        "error": "Content body is required",
+                    }, 400)
+
+                allowed_statuses = {
+                    "draft",
+                    "published",
+                }
+
+                if status not in allowed_statuses:
+                    return json_response({
+                        "success": False,
+                        "error": "Invalid content status",
+                        "allowed_statuses": sorted(
+                            allowed_statuses
+                        ),
+                    }, 400)
+
+                allowed_content_types = {
+                    "text",
+                    "social",
+                    "blog",
+                    "email",
+                    "ad",
+                    "script",
+                    "other",
+                }
+
+                if content_type not in allowed_content_types:
+                    return json_response({
+                        "success": False,
+                        "error": "Invalid content type",
+                        "allowed_content_types": sorted(
+                            allowed_content_types
+                        ),
+                    }, 400)
+
+                plan = customer[3] or "free"
+
+                max_content_items = PLAN_FEATURES.get(
+                    plan,
+                    PLAN_FEATURES["free"],
+                )["max_content_items"]
+
+                cur.execute(
+                    """
+                    SELECT COUNT(*)
+                    FROM content_items
+                    WHERE customer_id = %s
+                    """,
+                    (customer_id,),
+                )
+
+                content_count = cur.fetchone()[0]
+
+                if content_count >= max_content_items:
+                    return json_response({
+                        "success": False,
+                        "error": "Content limit reached",
+                        "plan": plan,
+                        "max_content_items": max_content_items,
+                    }, 403)
+
+                content_id = str(uuid.uuid4())
+
+                cur.execute(
+                    """
+                    INSERT INTO content_items (
+                        id,
+                        customer_id,
+                        title,
+                        body,
+                        content_type,
+                        status
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    RETURNING
+                        id,
+                        customer_id,
+                        title,
+                        body,
+                        content_type,
+                        status,
+                        created_at,
+                        updated_at
+                    """,
+                    (
+                        content_id,
+                        customer_id,
+                        title,
+                        content_body,
+                        content_type,
+                        status,
+                    ),
+                )
+
+                row = cur.fetchone()
+
+                return json_response({
+                    "success": True,
+                    "content": serialize_content(row),
+                }, 201)
+
+    except Exception as exc:
+        print(
+            f"CONTENT_OPERATION_ERROR: "
+            f"{type(exc).__name__}: {exc}"
+        )
+
+        return json_response({
+            "success": False,
+            "error": "Content operation failed",
+        }, 500)
+
+
+@app.route(
+    route="content/{content_id}",
+    methods=["GET", "PUT", "DELETE", "OPTIONS"],
+)
+def content_detail(
+    req: func.HttpRequest,
+) -> func.HttpResponse:
+    if req.method == "OPTIONS":
+        return json_response({}, 204)
+
+    content_id = str(
+        req.route_params.get("content_id", "")
+    ).strip()
+
+    customer_id = str(
+        req.params.get("customer_id", "")
+    ).strip()
+
+    if not content_id:
+        return json_response({
+            "success": False,
+            "error": "content_id is required",
+        }, 400)
+
+    if not customer_id:
+        return json_response({
+            "success": False,
+            "error": "customer_id is required",
+        }, 400)
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                if req.method == "GET":
+                    cur.execute(
+                        """
+                        SELECT
+                            id,
+                            customer_id,
+                            title,
+                            body,
+                            content_type,
+                            status,
+                            created_at,
+                            updated_at
+                        FROM content_items
+                        WHERE id = %s
+                          AND customer_id = %s
+                        """,
+                        (content_id, customer_id),
+                    )
+
+                    row = cur.fetchone()
+
+                    if not row:
+                        return json_response({
+                            "success": False,
+                            "error": "Content not found",
+                        }, 404)
+
+                    return json_response({
+                        "success": True,
+                        "content": serialize_content(row),
+                    })
+
+                if req.method == "DELETE":
+                    cur.execute(
+                        """
+                        DELETE FROM content_items
+                        WHERE id = %s
+                          AND customer_id = %s
+                        RETURNING id
+                        """,
+                        (content_id, customer_id),
+                    )
+
+                    row = cur.fetchone()
+
+                    if not row:
+                        return json_response({
+                            "success": False,
+                            "error": "Content not found",
+                        }, 404)
+
+                    return json_response({
+                        "success": True,
+                        "deleted": str(row[0]),
+                    })
+
+                try:
+                    body = req.get_json()
+                except ValueError:
+                    return json_response({
+                        "success": False,
+                        "error": "Invalid JSON",
+                    }, 400)
+
+                title = str(
+                    body.get("title", "")
+                ).strip()
+
+                content_body = str(
+                    body.get("body", "")
+                ).strip()
+
+                content_type = str(
+                    body.get("content_type", "text")
+                ).strip().lower() or "text"
+
+                status = str(
+                    body.get("status", "draft")
+                ).strip().lower() or "draft"
+
+                if not title:
+                    return json_response({
+                        "success": False,
+                        "error": "Content title is required",
+                    }, 400)
+
+                if not content_body:
+                    return json_response({
+                        "success": False,
+                        "error": "Content body is required",
+                    }, 400)
+
+                allowed_statuses = {
+                    "draft",
+                    "published",
+                }
+
+                if status not in allowed_statuses:
+                    return json_response({
+                        "success": False,
+                        "error": "Invalid content status",
+                        "allowed_statuses": sorted(
+                            allowed_statuses
+                        ),
+                    }, 400)
+
+                allowed_content_types = {
+                    "text",
+                    "social",
+                    "blog",
+                    "email",
+                    "ad",
+                    "script",
+                    "other",
+                }
+
+                if content_type not in allowed_content_types:
+                    return json_response({
+                        "success": False,
+                        "error": "Invalid content type",
+                        "allowed_content_types": sorted(
+                            allowed_content_types
+                        ),
+                    }, 400)
+
+                cur.execute(
+                    """
+                    UPDATE content_items
+                    SET
+                        title = %s,
+                        body = %s,
+                        content_type = %s,
+                        status = %s,
+                        updated_at = NOW()
+                    WHERE id = %s
+                      AND customer_id = %s
+                    RETURNING
+                        id,
+                        customer_id,
+                        title,
+                        body,
+                        content_type,
+                        status,
+                        created_at,
+                        updated_at
+                    """,
+                    (
+                        title,
+                        content_body,
+                        content_type,
+                        status,
+                        content_id,
+                        customer_id,
+                    ),
+                )
+
+                row = cur.fetchone()
+
+                if not row:
+                    return json_response({
+                        "success": False,
+                        "error": "Content not found",
+                    }, 404)
+
+                return json_response({
+                    "success": True,
+                    "content": serialize_content(row),
+                })
+
+    except Exception as exc:
+        print(
+            f"CONTENT_DETAIL_ERROR: "
+            f"{type(exc).__name__}: {exc}"
+        )
+
+        return json_response({
+            "success": False,
+            "error": "Content operation failed",
+        }, 500)
+
+
 @app.route(route="campaigns", methods=["GET", "POST", "OPTIONS"])
 def campaigns(req: func.HttpRequest) -> func.HttpResponse:
     if req.method == "OPTIONS":
