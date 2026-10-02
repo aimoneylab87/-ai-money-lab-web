@@ -1725,7 +1725,17 @@ def analytics_dashboard(req: func.HttpRequest) -> func.HttpResponse:
 
                 cur.execute(
                     f"""
-                    SELECT COALESCE(source, '(direct)'), COUNT(*)
+                    SELECT
+                        COALESCE(source, '(direct)') AS source,
+                        COUNT(*) FILTER (
+                            WHERE event = 'page_view'
+                        ) AS page_views,
+                        COUNT(*) FILTER (
+                            WHERE event = 'click'
+                        ) AS clicks,
+                        COUNT(*) FILTER (
+                            WHERE event = 'conversion'
+                        ) AS conversions
                     FROM traffic_events
                     {scope}
                     GROUP BY source
@@ -1737,7 +1747,9 @@ def analytics_dashboard(req: func.HttpRequest) -> func.HttpResponse:
                 sources = [
                     {
                         "source": row[0],
-                        "count": row[1],
+                        "page_views": row[1],
+                        "clicks": row[2],
+                        "conversions": row[3],
                     }
                     for row in cur.fetchall()
                 ]
