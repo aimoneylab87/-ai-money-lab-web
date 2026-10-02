@@ -1703,6 +1703,11 @@ def analytics_dashboard(req: func.HttpRequest) -> func.HttpResponse:
 
                 scope = "WHERE customer_id = %s" if customer_id else ""
                 params = (customer_id,) if customer_id else ()
+                campaign_scope = (
+                    "WHERE te.customer_id = %s"
+                    if customer_id
+                    else ""
+                )
 
                 cur.execute(
                     f"""
@@ -1826,18 +1831,20 @@ def analytics_dashboard(req: func.HttpRequest) -> func.HttpResponse:
                 cur.execute(
                     f"""
                     SELECT
-                        COALESCE(campaign, '(none)') AS campaign,
+                        COALESCE(c.name, te.campaign, '(none)') AS campaign,
                         COUNT(*) FILTER (
-                            WHERE event = 'click'
+                            WHERE te.event = 'click'
                         ) AS clicks,
                         COUNT(*) FILTER (
-                            WHERE event = 'conversion'
+                            WHERE te.event = 'conversion'
                         ) AS conversions,
-                        COALESCE(SUM(revenue), 0) AS revenue,
-                        COALESCE(SUM(cost), 0) AS cost
-                    FROM traffic_events
-                    {scope}
-                    GROUP BY campaign
+                        COALESCE(SUM(te.revenue), 0) AS revenue,
+                        COALESCE(SUM(te.cost), 0) AS cost
+                    FROM traffic_events te
+                    LEFT JOIN campaigns c
+                        ON c.id::text = te.campaign
+                    {campaign_scope}
+                    GROUP BY c.name, te.campaign
                     ORDER BY revenue DESC, clicks DESC
                     """,
                     params,
