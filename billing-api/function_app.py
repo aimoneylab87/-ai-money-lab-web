@@ -1225,7 +1225,6 @@ def track(req: func.HttpRequest) -> func.HttpResponse:
                         campaign,
                         content,
                         landing_page,
-                        referrer,
                         page_url,
                         session_id,
                         destination,
@@ -1236,7 +1235,7 @@ def track(req: func.HttpRequest) -> func.HttpResponse:
                     )
                     VALUES (
                         %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s, %s, %s
+                        %s, %s, %s, %s, %s, %s
                     )
                     RETURNING id, created_at
                     """,
@@ -1247,7 +1246,6 @@ def track(req: func.HttpRequest) -> func.HttpResponse:
                         body.get("campaign"),
                         body.get("content"),
                         body.get("landing_page"),
-                        body.get("referrer"),
                         body.get("page_url"),
                         body.get("session_id"),
                         body.get("destination"),
